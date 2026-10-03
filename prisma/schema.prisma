@@ -1,0 +1,1166 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserKind {
+  INTERNAL
+  SUPPLIER
+}
+
+enum FacilityType {
+  CENTRAL_WAREHOUSE
+  CENTRAL_KITCHEN
+  BRANCH
+}
+
+enum StockLocationType {
+  PHYSICAL
+  IN_TRANSIT
+}
+
+enum DepartmentType {
+  KITCHEN
+  TABLE
+  WAREHOUSE
+  INVENTORY
+  OTHER
+}
+
+enum ScopeType {
+  ORGANIZATION
+  FACILITY
+  STOCK_LOCATION
+  DEPARTMENT
+  OWN
+  SUPPLIER
+}
+
+enum SourceType {
+  STOCK
+  SUPPLIER
+}
+
+enum DocumentStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum OrderStatus {
+  DRAFT
+  RELEASED
+  PARTIAL
+  COMPLETED
+  CLOSED
+  CANCELLED
+}
+
+enum OrderSourceType {
+  STOCK
+  SUPPLIER
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  AUTO_APPROVED
+}
+
+enum DispatchStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum ReceiptStatus {
+  DRAFT
+  POSTED
+  PENDING_EXCESS_REVIEW
+  CANCELLED
+}
+
+enum DiscrepancyType {
+  SHORTAGE
+  EXCESS
+  DAMAGED
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  RESOLVED
+}
+
+enum LedgerEntryType {
+  DISPATCH_OUT
+  TRANSIT_IN
+  TRANSIT_OUT
+  RECEIPT_IN
+  SUPPLIER_RECEIPT_IN
+  ADJUSTMENT
+  DAMAGE
+  REVERSAL
+}
+
+enum AdjustmentStatus {
+  DRAFT
+  APPROVED
+  POSTED
+  REJECTED
+  CANCELLED
+}
+
+enum StocktakeStatus {
+  DRAFT
+  SUBMITTED
+  REOPENED
+}
+
+enum DamageStatus {
+  DRAFT
+  SUBMITTED
+  CONFIRMED
+  REJECTED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum TransferStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum SalesImportStatus {
+  DRAFT
+  VALIDATED
+  DATA_INCOMPLETE
+  COMMITTED
+  FAILED
+}
+
+enum VarianceDataStatus {
+  COMPLETE
+  DATA_INCOMPLETE
+}
+
+model Organization {
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique @db.VarChar(50)
+  name          String             @db.VarChar(200)
+  active        Boolean            @default(true)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  facilities    Facility[]
+  users         User[]
+  roles         Role[]
+  ingredients   Ingredient[]
+  groups        IngredientGroup[]
+  units         Unit[]
+  suppliers     Supplier[]
+  requests      SupplyRequest[]
+  orders        FulfillmentOrder[]
+  auditEvents   AuditEvent[]
+  notifications Notification[]
+  transfers     Transfer[]
+  menuMappings  MenuItemMapping[]
+  salesBatches  SalesImportBatch[]
+  salesRecords  SalesRecord[]
+  variances     VarianceResult[]
+  alertRules    AlertRule[]
+
+  @@map("organizations")
+}
+
+model Facility {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  code           String             @db.VarChar(50)
+  name           String             @db.VarChar(200)
+  type           FacilityType
+  active         Boolean            @default(true)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  stockLocations StockLocation[]
+  departments    Department[]
+  eligibilities  ItemEligibility[]
+  sourceRules    SourceRule[]
+  requests       SupplyRequest[]
+  roleGrants     RoleGrant[]
+  menuMappings   MenuItemMapping[]
+  salesBatches   SalesImportBatch[]
+  alertRules     AlertRule[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, active])
+  @@map("facilities")
+}
+
+model StockLocation {
+  id                String                @id @default(uuid()) @db.Uuid
+  facilityId        String                @map("facility_id") @db.Uuid
+  code              String                @db.VarChar(50)
+  name              String                @db.VarChar(200)
+  type              StockLocationType     @default(PHYSICAL)
+  active            Boolean               @default(true)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  facility          Facility              @relation(fields: [facilityId], references: [id])
+  departments       Department[]
+  grants            RoleGrant[]
+  stockBalances     StockBalance[]
+  ledgerEntries     StockLedgerEntry[]
+  sourceRules       SourceRule[]          @relation("SourceStockLocation")
+  destinationOrders FulfillmentOrder[]    @relation("DestinationLocation")
+  sourceOrders      FulfillmentOrder[]    @relation("SourceLocation")
+  stocktakes        Stocktake[]
+  damageReports     DamageReport[]
+  transfersFrom     Transfer[]            @relation("TransferFrom")
+  transfersTo       Transfer[]            @relation("TransferTo")
+  recipeVersions    RecipeVersion[]
+  varianceResults   VarianceResult[]
+  adjustments       InventoryAdjustment[]
+
+  @@unique([facilityId, code])
+  @@index([facilityId, active])
+  @@map("stock_locations")
+}
+
+model Department {
+  id              String            @id @default(uuid()) @db.Uuid
+  facilityId      String            @map("facility_id") @db.Uuid
+  stockLocationId String?           @map("stock_location_id") @db.Uuid
+  code            String            @db.VarChar(50)
+  name            String            @db.VarChar(200)
+  type            DepartmentType
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  facility        Facility          @relation(fields: [facilityId], references: [id])
+  stockLocation   StockLocation?    @relation(fields: [stockLocationId], references: [id])
+  grants          RoleGrant[]
+  eligibilities   ItemEligibility[]
+  requests        SupplyRequest[]
+
+  @@unique([facilityId, code])
+  @@index([stockLocationId])
+  @@map("departments")
+}
+
+model User {
+  id               String          @id @default(uuid()) @db.Uuid
+  organizationId   String          @map("organization_id") @db.Uuid
+  supplierId       String?         @map("supplier_id") @db.Uuid
+  kind             UserKind        @default(INTERNAL)
+  username         String          @db.VarChar(100)
+  displayName      String          @map("display_name") @db.VarChar(200)
+  passwordHash     String          @map("password_hash")
+  active           Boolean         @default(true)
+  tokenVersion     Int             @default(0) @map("token_version")
+  lastLoginAt      DateTime?       @map("last_login_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  supplier         Supplier?       @relation(fields: [supplierId], references: [id])
+  sessions         Session[]
+  grants           RoleGrant[]
+  createdRequests  SupplyRequest[] @relation("RequestCreator")
+  auditEvents      AuditEvent[]
+  notifications    Notification[]
+  createdTransfers Transfer[]      @relation("TransferCreator")
+
+  @@unique([organizationId, username])
+  @@index([supplierId])
+  @@index([organizationId, createdAt, id])
+  @@map("users")
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at")
+  revokedAt        DateTime? @map("revoked_at")
+  ipAddress        String?   @map("ip_address") @db.VarChar(64)
+  userAgent        String?   @map("user_agent") @db.VarChar(500)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+model Role {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  code           String           @db.VarChar(80)
+  name           String           @db.VarChar(150)
+  system         Boolean          @default(false)
+  active         Boolean          @default(true)
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  permissions    RolePermission[]
+  grants         RoleGrant[]
+
+  @@unique([organizationId, code])
+  @@map("roles")
+}
+
+model Permission {
+  code        String           @id @db.VarChar(100)
+  description String           @db.VarChar(250)
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId         String     @map("role_id") @db.Uuid
+  permissionCode String     @map("permission_code") @db.VarChar(100)
+  role           Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission     Permission @relation(fields: [permissionCode], references: [code], onDelete: Cascade)
+
+  @@id([roleId, permissionCode])
+  @@map("role_permissions")
+}
+
+model RoleGrant {
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @map("user_id") @db.Uuid
+  roleId          String         @map("role_id") @db.Uuid
+  scopeType       ScopeType      @map("scope_type")
+  facilityId      String?        @map("facility_id") @db.Uuid
+  stockLocationId String?        @map("stock_location_id") @db.Uuid
+  departmentId    String?        @map("department_id") @db.Uuid
+  createdAt       DateTime       @default(now()) @map("created_at")
+  revokedAt       DateTime?      @map("revoked_at")
+  user            User           @relation(fields: [userId], references: [id])
+  role            Role           @relation(fields: [roleId], references: [id])
+  facility        Facility?      @relation(fields: [facilityId], references: [id])
+  stockLocation   StockLocation? @relation(fields: [stockLocationId], references: [id])
+  department      Department?    @relation(fields: [departmentId], references: [id])
+
+  @@index([userId, revokedAt])
+  @@map("role_grants")
+}
+
+model IngredientGroup {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  code           String       @db.VarChar(50)
+  name           String       @db.VarChar(200)
+  active         Boolean      @default(true)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  ingredients    Ingredient[]
+
+  @@unique([organizationId, code])
+  @@map("ingredient_groups")
+}
+
+model Unit {
+  id              String                     @id @default(uuid()) @db.Uuid
+  organizationId  String                     @map("organization_id") @db.Uuid
+  code            String                     @db.VarChar(30)
+  name            String                     @db.VarChar(100)
+  decimalScale    Int                        @default(3) @map("decimal_scale")
+  active          Boolean                    @default(true)
+  organization    Organization               @relation(fields: [organizationId], references: [id])
+  baseIngredients Ingredient[]
+  conversions     IngredientUnitConversion[]
+
+  @@unique([organizationId, code])
+  @@map("units")
+}
+
+model Ingredient {
+  id              String                     @id @default(uuid()) @db.Uuid
+  organizationId  String                     @map("organization_id") @db.Uuid
+  groupId         String?                    @map("group_id") @db.Uuid
+  baseUnitId      String                     @map("base_unit_id") @db.Uuid
+  code            String                     @db.VarChar(50)
+  name            String                     @db.VarChar(200)
+  active          Boolean                    @default(true)
+  organization    Organization               @relation(fields: [organizationId], references: [id])
+  group           IngredientGroup?           @relation(fields: [groupId], references: [id])
+  baseUnit        Unit                       @relation(fields: [baseUnitId], references: [id])
+  conversions     IngredientUnitConversion[]
+  supplierLinks   SupplierIngredient[]
+  eligibilities   ItemEligibility[]
+  sourceRules     SourceRule[]
+  requestLines    RequestLine[]
+  orderLines      FulfillmentLine[]
+  balances        StockBalance[]
+  ledgerEntries   StockLedgerEntry[]
+  transferLines   TransferLine[]
+  stocktakeLines  StocktakeLine[]
+  damageLines     DamageLine[]
+  recipeItems     RecipeIngredient[]
+  varianceResults VarianceResult[]
+  alertRules      AlertRule[]
+  adjustments     InventoryAdjustment[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, active])
+  @@map("ingredients")
+}
+
+model IngredientUnitConversion {
+  id            String     @id @default(uuid()) @db.Uuid
+  ingredientId  String     @map("ingredient_id") @db.Uuid
+  unitId        String     @map("unit_id") @db.Uuid
+  factorToBase  Decimal    @map("factor_to_base") @db.Decimal(20, 6)
+  version       Int        @default(1)
+  effectiveFrom DateTime   @default(now()) @map("effective_from")
+  effectiveTo   DateTime?  @map("effective_to")
+  ingredient    Ingredient @relation(fields: [ingredientId], references: [id])
+  unit          Unit       @relation(fields: [unitId], references: [id])
+
+  @@unique([ingredientId, unitId, version])
+  @@index([ingredientId, effectiveFrom, effectiveTo])
+  @@map("ingredient_unit_conversions")
+}
+
+model Supplier {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @map("organization_id") @db.Uuid
+  code           String               @db.VarChar(50)
+  name           String               @db.VarChar(200)
+  phone          String?              @db.VarChar(30)
+  email          String?              @db.VarChar(200)
+  active         Boolean              @default(true)
+  organization   Organization         @relation(fields: [organizationId], references: [id])
+  users          User[]
+  ingredients    SupplierIngredient[]
+  sourceRules    SourceRule[]
+  orders         FulfillmentOrder[]
+
+  @@unique([organizationId, code])
+  @@map("suppliers")
+}
+
+model SupplierIngredient {
+  id             String     @id @default(uuid()) @db.Uuid
+  supplierId     String     @map("supplier_id") @db.Uuid
+  ingredientId   String     @map("ingredient_id") @db.Uuid
+  supplierSku    String?    @map("supplier_sku") @db.VarChar(100)
+  referencePrice Decimal?   @map("reference_price") @db.Decimal(20, 4)
+  active         Boolean    @default(true)
+  supplier       Supplier   @relation(fields: [supplierId], references: [id])
+  ingredient     Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([supplierId, ingredientId])
+  @@map("supplier_ingredients")
+}
+
+model ItemEligibility {
+  id           String     @id @default(uuid()) @db.Uuid
+  facilityId   String     @map("facility_id") @db.Uuid
+  departmentId String     @map("department_id") @db.Uuid
+  ingredientId String     @map("ingredient_id") @db.Uuid
+  active       Boolean    @default(true)
+  facility     Facility   @relation(fields: [facilityId], references: [id])
+  department   Department @relation(fields: [departmentId], references: [id])
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([facilityId, departmentId, ingredientId])
+  @@map("item_eligibilities")
+}
+
+model SourceRule {
+  id                    String               @id @default(uuid()) @db.Uuid
+  facilityId            String               @map("facility_id") @db.Uuid
+  ingredientId          String               @map("ingredient_id") @db.Uuid
+  sourceType            SourceType           @map("source_type")
+  sourceStockLocationId String?              @map("source_stock_location_id") @db.Uuid
+  supplierId            String?              @map("supplier_id") @db.Uuid
+  revision              Int                  @default(1)
+  active                Boolean              @default(true)
+  effectiveFrom         DateTime             @default(now()) @map("effective_from")
+  facility              Facility             @relation(fields: [facilityId], references: [id])
+  ingredient            Ingredient           @relation(fields: [ingredientId], references: [id])
+  sourceStockLocation   StockLocation?       @relation("SourceStockLocation", fields: [sourceStockLocationId], references: [id])
+  supplier              Supplier?            @relation(fields: [supplierId], references: [id])
+  revisions             SourceRuleRevision[]
+
+  @@unique([facilityId, ingredientId])
+  @@index([facilityId, effectiveFrom, id])
+  @@map("source_rules")
+}
+
+model SourceRuleRevision {
+  id           String     @id @default(uuid()) @db.Uuid
+  sourceRuleId String     @map("source_rule_id") @db.Uuid
+  revision     Int
+  beforeData   Json?      @map("before_data")
+  afterData    Json       @map("after_data")
+  changedById  String     @map("changed_by_id") @db.Uuid
+  changedAt    DateTime   @default(now()) @map("changed_at")
+  sourceRule   SourceRule @relation(fields: [sourceRuleId], references: [id])
+
+  @@unique([sourceRuleId, revision])
+  @@map("source_rule_revisions")
+}
+
+model SupplyRequest {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  facilityId     String             @map("facility_id") @db.Uuid
+  departmentId   String             @map("department_id") @db.Uuid
+  createdById    String             @map("created_by_id") @db.Uuid
+  code           String             @db.VarChar(50)
+  status         DocumentStatus     @default(DRAFT)
+  requiredDate   DateTime           @map("required_date") @db.Date
+  note           String?            @db.VarChar(1000)
+  version        Int                @default(1)
+  submittedAt    DateTime?          @map("submitted_at")
+  decidedAt      DateTime?          @map("decided_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  facility       Facility           @relation(fields: [facilityId], references: [id])
+  department     Department         @relation(fields: [departmentId], references: [id])
+  createdBy      User               @relation("RequestCreator", fields: [createdById], references: [id])
+  lines          RequestLine[]
+  approvals      ApprovalEvent[]
+  orders         FulfillmentOrder[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, facilityId, status])
+  @@index([organizationId, createdAt, id])
+  @@index([organizationId, departmentId, createdAt, id])
+  @@index([organizationId, createdById, createdAt, id])
+  @@map("supply_requests")
+}
+
+model Transfer {
+  id                  String                  @id @default(uuid()) @db.Uuid
+  organizationId      String                  @map("organization_id") @db.Uuid
+  code                String                  @db.VarChar(50)
+  fromStockLocationId String                  @map("from_stock_location_id") @db.Uuid
+  toStockLocationId   String                  @map("to_stock_location_id") @db.Uuid
+  createdById         String                  @map("created_by_id") @db.Uuid
+  status              TransferStatus          @default(DRAFT)
+  version             Int                     @default(1)
+  note                String?                 @db.VarChar(1000)
+  submittedAt         DateTime?               @map("submitted_at")
+  decidedAt           DateTime?               @map("decided_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  updatedAt           DateTime                @updatedAt @map("updated_at")
+  organization        Organization            @relation(fields: [organizationId], references: [id])
+  fromStockLocation   StockLocation           @relation("TransferFrom", fields: [fromStockLocationId], references: [id])
+  toStockLocation     StockLocation           @relation("TransferTo", fields: [toStockLocationId], references: [id])
+  createdBy           User                    @relation("TransferCreator", fields: [createdById], references: [id])
+  lines               TransferLine[]
+  approvals           TransferApprovalEvent[]
+  orders              FulfillmentOrder[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([organizationId, createdAt, id])
+  @@index([organizationId, fromStockLocationId, createdAt, id])
+  @@index([organizationId, toStockLocationId, createdAt, id])
+  @@index([createdById, createdAt, id])
+  @@map("transfers")
+}
+
+model TransferLine {
+  id                     String            @id @default(uuid()) @db.Uuid
+  transferId             String            @map("transfer_id") @db.Uuid
+  ingredientId           String            @map("ingredient_id") @db.Uuid
+  quantity               Decimal           @db.Decimal(20, 3)
+  ingredientNameSnapshot String            @map("ingredient_name_snapshot") @db.VarChar(200)
+  unitCodeSnapshot       String            @map("unit_code_snapshot") @db.VarChar(30)
+  transfer               Transfer          @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  ingredient             Ingredient        @relation(fields: [ingredientId], references: [id])
+  orderLines             FulfillmentLine[]
+
+  @@unique([transferId, ingredientId])
+  @@map("transfer_lines")
+}
+
+model TransferApprovalEvent {
+  id         String           @id @default(uuid()) @db.Uuid
+  transferId String           @map("transfer_id") @db.Uuid
+  actorId    String           @map("actor_id") @db.Uuid
+  decision   ApprovalDecision
+  policy     String           @db.VarChar(100)
+  note       String?          @db.VarChar(1000)
+  createdAt  DateTime         @default(now()) @map("created_at")
+  transfer   Transfer         @relation(fields: [transferId], references: [id])
+
+  @@index([transferId, createdAt])
+  @@map("transfer_approval_events")
+}
+
+model RequestLine {
+  id                       String            @id @default(uuid()) @db.Uuid
+  requestId                String            @map("request_id") @db.Uuid
+  ingredientId             String            @map("ingredient_id") @db.Uuid
+  requestedUnitId          String            @map("requested_unit_id") @db.Uuid
+  requestedQuantity        Decimal           @map("requested_quantity") @db.Decimal(20, 3)
+  baseQuantity             Decimal           @map("base_quantity") @db.Decimal(20, 3)
+  ingredientNameSnapshot   String            @map("ingredient_name_snapshot") @db.VarChar(200)
+  unitCodeSnapshot         String            @map("unit_code_snapshot") @db.VarChar(30)
+  conversionFactorSnapshot Decimal           @map("conversion_factor_snapshot") @db.Decimal(20, 6)
+  sourceTypeSnapshot       SourceType?       @map("source_type_snapshot")
+  sourceRuleRevision       Int?              @map("source_rule_revision")
+  sourceStockLocationId    String?           @map("source_stock_location_id") @db.Uuid
+  supplierId               String?           @map("supplier_id") @db.Uuid
+  request                  SupplyRequest     @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  ingredient               Ingredient        @relation(fields: [ingredientId], references: [id])
+  orderLines               FulfillmentLine[]
+
+  @@unique([requestId, ingredientId])
+  @@map("request_lines")
+}
+
+model ApprovalEvent {
+  id        String           @id @default(uuid()) @db.Uuid
+  requestId String           @map("request_id") @db.Uuid
+  actorId   String           @map("actor_id") @db.Uuid
+  decision  ApprovalDecision
+  policy    String           @db.VarChar(100)
+  note      String?          @db.VarChar(1000)
+  createdAt DateTime         @default(now()) @map("created_at")
+  request   SupplyRequest    @relation(fields: [requestId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@map("approval_events")
+}
+
+model FulfillmentOrder {
+  id                         String            @id @default(uuid()) @db.Uuid
+  organizationId             String            @map("organization_id") @db.Uuid
+  requestId                  String?           @map("request_id") @db.Uuid
+  transferId                 String?           @map("transfer_id") @db.Uuid
+  code                       String            @db.VarChar(50)
+  sourceType                 OrderSourceType   @map("source_type")
+  sourceStockLocationId      String?           @map("source_stock_location_id") @db.Uuid
+  supplierId                 String?           @map("supplier_id") @db.Uuid
+  destinationStockLocationId String            @map("destination_stock_location_id") @db.Uuid
+  status                     OrderStatus       @default(RELEASED)
+  version                    Int               @default(1)
+  releasedAt                 DateTime?         @map("released_at")
+  createdAt                  DateTime          @default(now()) @map("created_at")
+  updatedAt                  DateTime          @updatedAt @map("updated_at")
+  organization               Organization      @relation(fields: [organizationId], references: [id])
+  request                    SupplyRequest?    @relation(fields: [requestId], references: [id])
+  transfer                   Transfer?         @relation(fields: [transferId], references: [id])
+  sourceStockLocation        StockLocation?    @relation("SourceLocation", fields: [sourceStockLocationId], references: [id])
+  supplier                   Supplier?         @relation(fields: [supplierId], references: [id])
+  destinationStockLocation   StockLocation     @relation("DestinationLocation", fields: [destinationStockLocationId], references: [id])
+  lines                      FulfillmentLine[]
+  dispatches                 Dispatch[]
+  receipts                   Receipt[]
+  paymentTracking            PaymentTracking?
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@index([supplierId, status])
+  @@index([organizationId, createdAt, id])
+  @@index([supplierId, releasedAt, id])
+  @@index([organizationId, destinationStockLocationId, createdAt, id])
+  @@index([organizationId, sourceStockLocationId, createdAt, id])
+  @@map("fulfillment_orders")
+}
+
+model FulfillmentLine {
+  id                      String           @id @default(uuid()) @db.Uuid
+  orderId                 String           @map("order_id") @db.Uuid
+  requestLineId           String?          @map("request_line_id") @db.Uuid
+  transferLineId          String?          @map("transfer_line_id") @db.Uuid
+  ingredientId            String           @map("ingredient_id") @db.Uuid
+  approvedQuantity        Decimal          @map("approved_quantity") @db.Decimal(20, 3)
+  dispatchedQuantity      Decimal          @default(0) @map("dispatched_quantity") @db.Decimal(20, 3)
+  receivedQuantity        Decimal          @default(0) @map("received_quantity") @db.Decimal(20, 3)
+  acceptedExcessQuantity  Decimal          @default(0) @map("accepted_excess_quantity") @db.Decimal(20, 3)
+  closedRemainingQuantity Decimal          @default(0) @map("closed_remaining_quantity") @db.Decimal(20, 3)
+  unitCodeSnapshot        String           @map("unit_code_snapshot") @db.VarChar(30)
+  unitPriceSnapshot       Decimal?         @map("unit_price_snapshot") @db.Decimal(20, 4)
+  version                 Int              @default(1)
+  order                   FulfillmentOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  requestLine             RequestLine?     @relation(fields: [requestLineId], references: [id])
+  transferLine            TransferLine?    @relation(fields: [transferLineId], references: [id])
+  ingredient              Ingredient       @relation(fields: [ingredientId], references: [id])
+  dispatchLines           DispatchLine[]
+  receiptLines            ReceiptLine[]
+
+  @@unique([orderId, requestLineId])
+  @@unique([orderId, transferLineId])
+  @@map("fulfillment_lines")
+}
+
+model Dispatch {
+  id          String           @id @default(uuid()) @db.Uuid
+  orderId     String           @map("order_id") @db.Uuid
+  code        String           @unique @db.VarChar(50)
+  status      DispatchStatus   @default(DRAFT)
+  version     Int              @default(1)
+  createdById String           @map("created_by_id") @db.Uuid
+  postedById  String?          @map("posted_by_id") @db.Uuid
+  postedAt    DateTime?        @map("posted_at")
+  note        String?          @db.VarChar(1000)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  order       FulfillmentOrder @relation(fields: [orderId], references: [id])
+  lines       DispatchLine[]
+  receipts    Receipt[]
+
+  @@index([orderId, status])
+  @@map("dispatches")
+}
+
+model DispatchLine {
+  id          String          @id @default(uuid()) @db.Uuid
+  dispatchId  String          @map("dispatch_id") @db.Uuid
+  orderLineId String          @map("order_line_id") @db.Uuid
+  quantity    Decimal         @db.Decimal(20, 3)
+  dispatch    Dispatch        @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  orderLine   FulfillmentLine @relation(fields: [orderLineId], references: [id])
+
+  @@unique([dispatchId, orderLineId])
+  @@map("dispatch_lines")
+}
+
+model Receipt {
+  id            String            @id @default(uuid()) @db.Uuid
+  orderId       String            @map("order_id") @db.Uuid
+  dispatchId    String?           @map("dispatch_id") @db.Uuid
+  code          String            @unique @db.VarChar(50)
+  status        ReceiptStatus     @default(DRAFT)
+  version       Int               @default(1)
+  createdById   String            @map("created_by_id") @db.Uuid
+  postedById    String?           @map("posted_by_id") @db.Uuid
+  postedAt      DateTime?         @map("posted_at")
+  note          String?           @db.VarChar(1000)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  order         FulfillmentOrder  @relation(fields: [orderId], references: [id])
+  dispatch      Dispatch?         @relation(fields: [dispatchId], references: [id])
+  lines         ReceiptLine[]
+  discrepancies DiscrepancyCase[]
+
+  @@index([orderId, status])
+  @@map("receipts")
+}
+
+model ReceiptLine {
+  id               String            @id @default(uuid()) @db.Uuid
+  receiptId        String            @map("receipt_id") @db.Uuid
+  orderLineId      String            @map("order_line_id") @db.Uuid
+  reportedQuantity Decimal           @map("reported_quantity") @db.Decimal(20, 3)
+  acceptedQuantity Decimal           @default(0) @map("accepted_quantity") @db.Decimal(20, 3)
+  excessQuantity   Decimal           @default(0) @map("excess_quantity") @db.Decimal(20, 3)
+  note             String?           @db.VarChar(1000)
+  receipt          Receipt           @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  orderLine        FulfillmentLine   @relation(fields: [orderLineId], references: [id])
+  discrepancies    DiscrepancyCase[]
+
+  @@unique([receiptId, orderLineId])
+  @@map("receipt_lines")
+}
+
+model DiscrepancyCase {
+  id               String            @id @default(uuid()) @db.Uuid
+  receiptId        String            @map("receipt_id") @db.Uuid
+  receiptLineId    String            @map("receipt_line_id") @db.Uuid
+  type             DiscrepancyType
+  status           DiscrepancyStatus @default(OPEN)
+  expectedQuantity Decimal           @map("expected_quantity") @db.Decimal(20, 3)
+  actualQuantity   Decimal           @map("actual_quantity") @db.Decimal(20, 3)
+  resolution       String?           @db.VarChar(1000)
+  resolvedById     String?           @map("resolved_by_id") @db.Uuid
+  resolvedAt       DateTime?         @map("resolved_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  receipt          Receipt           @relation(fields: [receiptId], references: [id])
+  receiptLine      ReceiptLine       @relation(fields: [receiptLineId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([createdAt, id])
+  @@map("discrepancy_cases")
+}
+
+model StockBalance {
+  id              String        @id @default(uuid()) @db.Uuid
+  stockLocationId String        @map("stock_location_id") @db.Uuid
+  ingredientId    String        @map("ingredient_id") @db.Uuid
+  quantity        Decimal       @default(0) @db.Decimal(20, 3)
+  version         Int           @default(1)
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+
+  @@unique([stockLocationId, ingredientId])
+  @@index([updatedAt, id])
+  @@index([stockLocationId, updatedAt, id])
+  @@map("stock_balances")
+}
+
+model StockLedgerEntry {
+  id              String          @id @default(uuid()) @db.Uuid
+  stockLocationId String          @map("stock_location_id") @db.Uuid
+  ingredientId    String          @map("ingredient_id") @db.Uuid
+  entryType       LedgerEntryType @map("entry_type")
+  quantity        Decimal         @db.Decimal(20, 3)
+  sourceType      String          @map("source_type") @db.VarChar(50)
+  sourceId        String          @map("source_id") @db.Uuid
+  sourceLineId    String          @map("source_line_id") @db.Uuid
+  postingKey      String          @unique @map("posting_key") @db.VarChar(250)
+  reversalOfId    String?         @map("reversal_of_id") @db.Uuid
+  postedById      String          @map("posted_by_id") @db.Uuid
+  postedAt        DateTime        @default(now()) @map("posted_at")
+  stockLocation   StockLocation   @relation(fields: [stockLocationId], references: [id])
+  ingredient      Ingredient      @relation(fields: [ingredientId], references: [id])
+
+  @@index([stockLocationId, ingredientId, postedAt])
+  @@index([stockLocationId, postedAt, id])
+  @@index([postedAt, id])
+  @@map("stock_ledger_entries")
+}
+
+model InventoryAdjustment {
+  id              String           @id @default(uuid()) @db.Uuid
+  stockLocationId String           @map("stock_location_id") @db.Uuid
+  ingredientId    String           @map("ingredient_id") @db.Uuid
+  quantity        Decimal          @db.Decimal(20, 3)
+  reason          String           @db.VarChar(1000)
+  sourceType      String?          @map("source_type") @db.VarChar(50)
+  sourceId        String?          @map("source_id") @db.Uuid
+  status          AdjustmentStatus @default(DRAFT)
+  version         Int              @default(1)
+  createdById     String           @map("created_by_id") @db.Uuid
+  approvedById    String?          @map("approved_by_id") @db.Uuid
+  approvedAt      DateTime?        @map("approved_at")
+  postedById      String?          @map("posted_by_id") @db.Uuid
+  postedAt        DateTime?        @map("posted_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  stockLocation   StockLocation    @relation(fields: [stockLocationId], references: [id])
+  ingredient      Ingredient       @relation(fields: [ingredientId], references: [id])
+
+  @@index([stockLocationId, status])
+  @@index([stockLocationId, createdAt, id])
+  @@index([createdById, createdAt, id])
+  @@map("inventory_adjustments")
+}
+
+model Stocktake {
+  id              String           @id @default(uuid()) @db.Uuid
+  stockLocationId String           @map("stock_location_id") @db.Uuid
+  businessDate    DateTime         @map("business_date") @db.Date
+  cutoffAt        DateTime         @map("cutoff_at")
+  status          StocktakeStatus  @default(DRAFT)
+  version         Int              @default(1)
+  createdById     String           @map("created_by_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at")
+  submittedAt     DateTime?        @map("submitted_at")
+  stockLocation   StockLocation    @relation(fields: [stockLocationId], references: [id])
+  lines           StocktakeLine[]
+  varianceResults VarianceResult[]
+
+  @@unique([stockLocationId, businessDate, version])
+  @@index([stockLocationId, createdAt, id])
+  @@index([createdById, createdAt, id])
+  @@map("stocktakes")
+}
+
+model StocktakeLine {
+  id                       String     @id @default(uuid()) @db.Uuid
+  stocktakeId              String     @map("stocktake_id") @db.Uuid
+  ingredientId             String     @map("ingredient_id") @db.Uuid
+  countedQuantity          Decimal    @map("counted_quantity") @db.Decimal(20, 3)
+  expectedQuantitySnapshot Decimal?   @map("expected_quantity_snapshot") @db.Decimal(20, 3)
+  varianceQuantity         Decimal?   @map("variance_quantity") @db.Decimal(20, 3)
+  countedById              String     @map("counted_by_id") @db.Uuid
+  countedAt                DateTime   @default(now()) @map("counted_at")
+  stocktake                Stocktake  @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+  ingredient               Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@unique([stocktakeId, ingredientId])
+  @@map("stocktake_lines")
+}
+
+model DamageReport {
+  id              String        @id @default(uuid()) @db.Uuid
+  stockLocationId String        @map("stock_location_id") @db.Uuid
+  code            String        @unique @db.VarChar(50)
+  status          DamageStatus  @default(DRAFT)
+  version         Int           @default(1)
+  reason          String        @db.VarChar(1000)
+  createdById     String        @map("created_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  submittedAt     DateTime?     @map("submitted_at")
+  confirmedById   String?       @map("confirmed_by_id") @db.Uuid
+  confirmedAt     DateTime?     @map("confirmed_at")
+  stockLocation   StockLocation @relation(fields: [stockLocationId], references: [id])
+  lines           DamageLine[]
+
+  @@index([stockLocationId, status])
+  @@index([stockLocationId, createdAt, id])
+  @@index([createdById, createdAt, id])
+  @@map("damage_reports")
+}
+
+model DamageLine {
+  id           String       @id @default(uuid()) @db.Uuid
+  reportId     String       @map("report_id") @db.Uuid
+  ingredientId String       @map("ingredient_id") @db.Uuid
+  quantity     Decimal      @db.Decimal(20, 3)
+  unitCode     String       @map("unit_code") @db.VarChar(30)
+  reason       String?      @db.VarChar(1000)
+  report       DamageReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient   @relation(fields: [ingredientId], references: [id])
+
+  @@unique([reportId, ingredientId])
+  @@map("damage_lines")
+}
+
+model MenuItemMapping {
+  id              String          @id @default(uuid()) @db.Uuid
+  organizationId  String          @map("organization_id") @db.Uuid
+  facilityId      String          @map("facility_id") @db.Uuid
+  source          String          @db.VarChar(50)
+  externalItemKey String          @map("external_item_key") @db.VarChar(150)
+  menuItemName    String          @map("menu_item_name") @db.VarChar(250)
+  active          Boolean         @default(true)
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  facility        Facility        @relation(fields: [facilityId], references: [id])
+  recipeVersions  RecipeVersion[]
+  salesRecords    SalesRecord[]
+
+  @@unique([organizationId, facilityId, source, externalItemKey])
+  @@index([organizationId, facilityId, menuItemName, id])
+  @@map("menu_item_mappings")
+}
+
+model RecipeVersion {
+  id              String             @id @default(uuid()) @db.Uuid
+  mappingId       String             @map("mapping_id") @db.Uuid
+  stockLocationId String             @map("stock_location_id") @db.Uuid
+  version         Int
+  effectiveFrom   DateTime           @map("effective_from")
+  effectiveTo     DateTime?          @map("effective_to")
+  createdById     String             @map("created_by_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at")
+  mapping         MenuItemMapping    @relation(fields: [mappingId], references: [id])
+  stockLocation   StockLocation      @relation(fields: [stockLocationId], references: [id])
+  ingredients     RecipeIngredient[]
+
+  @@unique([mappingId, version])
+  @@index([mappingId, effectiveFrom, effectiveTo])
+  @@index([mappingId, effectiveFrom, id])
+  @@index([mappingId, stockLocationId, effectiveFrom])
+  @@map("recipe_versions")
+}
+
+model RecipeIngredient {
+  id              String        @id @default(uuid()) @db.Uuid
+  recipeVersionId String        @map("recipe_version_id") @db.Uuid
+  ingredientId    String        @map("ingredient_id") @db.Uuid
+  baseQuantity    Decimal       @map("base_quantity") @db.Decimal(20, 6)
+  recipeVersion   RecipeVersion @relation(fields: [recipeVersionId], references: [id], onDelete: Cascade)
+  ingredient      Ingredient    @relation(fields: [ingredientId], references: [id])
+
+  @@unique([recipeVersionId, ingredientId])
+  @@map("recipe_ingredients")
+}
+
+model SalesImportBatch {
+  id             String            @id @default(uuid()) @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  facilityId     String            @map("facility_id") @db.Uuid
+  source         String            @db.VarChar(50)
+  externalKey    String            @map("external_key") @db.VarChar(150)
+  status         SalesImportStatus @default(DRAFT)
+  errorSummary   Json?             @map("error_summary")
+  createdById    String            @map("created_by_id") @db.Uuid
+  committedById  String?           @map("committed_by_id") @db.Uuid
+  committedAt    DateTime?         @map("committed_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  organization   Organization      @relation(fields: [organizationId], references: [id])
+  facility       Facility          @relation(fields: [facilityId], references: [id])
+  records        SalesRecord[]
+
+  @@unique([organizationId, source, externalKey])
+  @@index([organizationId, facilityId, status])
+  @@map("sales_import_batches")
+}
+
+model SalesRecord {
+  id              String           @id @default(uuid()) @db.Uuid
+  organizationId  String           @map("organization_id") @db.Uuid
+  batchId         String           @map("batch_id") @db.Uuid
+  mappingId       String?          @map("mapping_id") @db.Uuid
+  source          String           @db.VarChar(50)
+  externalKey     String           @map("external_key") @db.VarChar(150)
+  externalItemKey String           @map("external_item_key") @db.VarChar(150)
+  soldAt          DateTime         @map("sold_at")
+  quantity        Decimal          @db.Decimal(20, 3)
+  validationError String?          @map("validation_error") @db.VarChar(1000)
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  batch           SalesImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  mapping         MenuItemMapping? @relation(fields: [mappingId], references: [id])
+
+  @@unique([organizationId, source, externalKey])
+  @@index([organizationId, soldAt])
+  @@index([batchId, id])
+  @@map("sales_records")
+}
+
+model VarianceResult {
+  id                      String             @id @default(uuid()) @db.Uuid
+  organizationId          String             @map("organization_id") @db.Uuid
+  stocktakeId             String             @map("stocktake_id") @db.Uuid
+  stockLocationId         String             @map("stock_location_id") @db.Uuid
+  ingredientId            String             @map("ingredient_id") @db.Uuid
+  version                 Int
+  dataStatus              VarianceDataStatus @map("data_status")
+  openingStockSnapshot    Decimal?           @map("opening_stock_snapshot") @db.Decimal(20, 3)
+  postedMovementSnapshot  Decimal?           @map("posted_movement_snapshot") @db.Decimal(20, 3)
+  expectedUsageSnapshot   Decimal?           @map("expected_usage_snapshot") @db.Decimal(20, 3)
+  expectedClosingSnapshot Decimal?           @map("expected_closing_snapshot") @db.Decimal(20, 3)
+  actualClosingSnapshot   Decimal            @map("actual_closing_snapshot") @db.Decimal(20, 3)
+  varianceQuantity        Decimal?           @map("variance_quantity") @db.Decimal(20, 3)
+  varianceRate            Decimal?           @map("variance_rate") @db.Decimal(12, 4)
+  missingData             Json?              @map("missing_data")
+  calculatedById          String             @map("calculated_by_id") @db.Uuid
+  calculatedAt            DateTime           @default(now()) @map("calculated_at")
+  organization            Organization       @relation(fields: [organizationId], references: [id])
+  stocktake               Stocktake          @relation(fields: [stocktakeId], references: [id])
+  stockLocation           StockLocation      @relation(fields: [stockLocationId], references: [id])
+  ingredient              Ingredient         @relation(fields: [ingredientId], references: [id])
+
+  @@unique([stocktakeId, ingredientId, version])
+  @@index([organizationId, stockLocationId, calculatedAt])
+  @@index([organizationId, calculatedAt, id])
+  @@map("variance_results")
+}
+
+model AlertRule {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  facilityId     String?      @map("facility_id") @db.Uuid
+  ingredientId   String?      @map("ingredient_id") @db.Uuid
+  thresholdType  String       @map("threshold_type") @db.VarChar(30)
+  thresholdValue Decimal      @map("threshold_value") @db.Decimal(20, 4)
+  testOnly       Boolean      @default(true) @map("test_only")
+  active         Boolean      @default(false)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  facility       Facility?    @relation(fields: [facilityId], references: [id])
+  ingredient     Ingredient?  @relation(fields: [ingredientId], references: [id])
+
+  @@index([organizationId, facilityId, ingredientId])
+  @@index([organizationId, id])
+  @@map("alert_rules")
+}
+
+model PaymentTracking {
+  id              String           @id @default(uuid()) @db.Uuid
+  orderId         String           @unique @map("order_id") @db.Uuid
+  reconciledValue Decimal          @default(0) @map("reconciled_value") @db.Decimal(20, 4)
+  paidValue       Decimal          @default(0) @map("paid_value") @db.Decimal(20, 4)
+  status          PaymentStatus    @default(UNPAID)
+  version         Int              @default(1)
+  updatedById     String           @map("updated_by_id") @db.Uuid
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  order           FulfillmentOrder @relation(fields: [orderId], references: [id])
+
+  @@index([updatedAt, id])
+  @@map("payment_tracking")
+}
+
+model IdempotencyRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  operation      String   @db.VarChar(100)
+  key            String   @db.VarChar(150)
+  requestHash    String   @map("request_hash") @db.VarChar(64)
+  statusCode     Int      @map("status_code")
+  responseBody   Json     @map("response_body")
+  createdAt      DateTime @default(now()) @map("created_at")
+  expiresAt      DateTime @map("expires_at")
+
+  @@unique([organizationId, userId, operation, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+model AuditEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  actorId        String?      @map("actor_id") @db.Uuid
+  action         String       @db.VarChar(100)
+  resourceType   String       @map("resource_type") @db.VarChar(100)
+  resourceId     String       @map("resource_id") @db.VarChar(100)
+  beforeData     Json?        @map("before_data")
+  afterData      Json?        @map("after_data")
+  requestId      String       @map("request_id") @db.VarChar(100)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  actor          User?        @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, resourceType, resourceId])
+  @@index([requestId])
+  @@index([organizationId, createdAt, id])
+  @@map("audit_events")
+}
+
+model Notification {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  title          String             @db.VarChar(250)
+  message        String             @db.VarChar(1000)
+  resourceType   String             @map("resource_type") @db.VarChar(100)
+  resourceId     String             @map("resource_id") @db.VarChar(100)
+  status         NotificationStatus @default(UNREAD)
+  readAt         DateTime?          @map("read_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  user           User               @relation(fields: [userId], references: [id])
+
+  @@index([userId, status, createdAt])
+  @@index([userId, createdAt, id])
+  @@map("notifications")
+}
+
+model OutboxEvent {
+  id            String       @id @default(uuid()) @db.Uuid
+  type          String       @db.VarChar(100)
+  aggregateType String       @map("aggregate_type") @db.VarChar(100)
+  aggregateId   String       @map("aggregate_id") @db.VarChar(100)
+  payload       Json
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  availableAt   DateTime     @default(now()) @map("available_at")
+  processedAt   DateTime?    @map("processed_at")
+  lastError     String?      @map("last_error") @db.VarChar(2000)
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([status, availableAt, createdAt])
+  @@map("outbox_events")
+}

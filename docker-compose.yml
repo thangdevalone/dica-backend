@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: dica
+      POSTGRES_USER: dica
+      POSTGRES_PASSWORD: dica_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - dica_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dica -d dica"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dica_postgres:
