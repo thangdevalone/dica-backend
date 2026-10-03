@@ -26,6 +26,7 @@ export const envSchema = Joi.object({
   HTTP_BODY_LIMIT: Joi.string()
     .pattern(/^\d+(kb|mb)$/i)
     .default("10mb"),
+  TRUST_PROXY_HOPS: Joi.number().integer().min(0).max(5).default(0),
   SWAGGER_ENABLED: Joi.boolean().default(false),
   DB_POOL_MAX: Joi.number().integer().min(2).max(100).default(20),
   DB_CONNECTION_TIMEOUT_MS: Joi.number()

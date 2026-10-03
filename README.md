@@ -23,7 +23,7 @@ Trạng thái toàn bộ scope và các blocker OPEN được ghi tại [docs/mo
 
 ## Chạy local
 
-Yêu cầu Node.js 22.12+ và PostgreSQL 17+. Có thể dùng PostgreSQL cài trực tiếp trên máy hoặc container Docker.
+Yêu cầu Node.js 22.22.3+, 24.15+ hoặc 26+ và PostgreSQL 17+. Có thể dùng PostgreSQL cài trực tiếp trên máy hoặc container Docker.
 
 1. Sao chép `.env.example` thành `.env`, thay hai JWT secret và mật khẩu seed.
 2. Cấu hình `DATABASE_URL` trỏ tới database PostgreSQL local, ví dụ `postgresql://user:password@localhost:5432/dica?schema=public`. Database phải tồn tại trước khi migrate.
@@ -49,6 +49,10 @@ npm test
 npm run build
 npm run format:check
 ```
+
+## Deploy VPS
+
+Image production, Docker Compose và workflow GitHub Actions/GHCR được mô tả tại [docs/deployment-vps.md](docs/deployment-vps.md). File cấu hình mẫu là `.env.production.example`; không commit `.env.production` hoặc secret thật.
 
 ## Quy ước response
 

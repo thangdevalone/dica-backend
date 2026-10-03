@@ -1,0 +1,193 @@
+name: CI and deploy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: dica-backend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Build
+        run: npm run build
+
+  image:
+    name: Build and publish image
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_ref: ${{ steps.image-ref.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Normalize image name
+        id: image-name
+        shell: bash
+        run: echo "value=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: metadata
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ steps.image-name.outputs.value }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+      - name: Pin deployment to image digest
+        id: image-ref
+        env:
+          IMAGE_NAME: ${{ steps.image-name.outputs.value }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        shell: bash
+        run: echo "value=${IMAGE_NAME}@${IMAGE_DIGEST}" >> "${GITHUB_OUTPUT}"
+
+  deploy:
+    name: Deploy production
+    if: github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Deploy over SSH
+        env:
+          IMAGE_REF: ${{ needs.image.outputs.image_ref }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH || '/opt/dica-backend' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          : "${IMAGE_REF:?Missing image digest}"
+          : "${VPS_HOST:?Missing VPS_HOST secret}"
+          : "${VPS_USER:?Missing VPS_USER secret}"
+          : "${VPS_SSH_PRIVATE_KEY:?Missing VPS_SSH_PRIVATE_KEY secret}"
+          : "${VPS_SSH_KNOWN_HOSTS:?Missing VPS_SSH_KNOWN_HOSTS secret}"
+          [[ "${VPS_PORT}" =~ ^[0-9]{1,5}$ ]] || { echo "Invalid VPS_PORT"; exit 1; }
+          ((VPS_PORT >= 1 && VPS_PORT <= 65535)) || { echo "Invalid VPS_PORT"; exit 1; }
+          [[ "${VPS_DEPLOY_PATH}" =~ ^/(opt|srv)/[A-Za-z0-9._/-]+$ ]] || {
+            echo "VPS_DEPLOY_PATH must be an absolute path under /opt or /srv"
+            exit 1
+          }
+
+          install -d -m 700 "${HOME}/.ssh"
+          printf '%s\n' "${VPS_SSH_PRIVATE_KEY}" > "${HOME}/.ssh/id_ed25519"
+          printf '%s\n' "${VPS_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 600 "${HOME}/.ssh/id_ed25519" "${HOME}/.ssh/known_hosts"
+
+          target="${VPS_USER}@${VPS_HOST}"
+          ssh_args=(-i "${HOME}/.ssh/id_ed25519" -p "${VPS_PORT}" -o BatchMode=yes)
+          scp_args=(-i "${HOME}/.ssh/id_ed25519" -P "${VPS_PORT}" -o BatchMode=yes)
+
+          ssh "${ssh_args[@]}" "${target}" "mkdir -p -- '${VPS_DEPLOY_PATH}'"
+          scp "${scp_args[@]}" docker-compose.yml \
+            "${target}:${VPS_DEPLOY_PATH}/docker-compose.yml.next"
+
+          ssh "${ssh_args[@]}" "${target}" bash -s -- \
+            "${VPS_DEPLOY_PATH}" "${IMAGE_REF}" <<'REMOTE'
+          set -Eeuo pipefail
+          deploy_path="$1"
+          image_ref="$2"
+          cd "${deploy_path}"
+
+          test -f .env.production || {
+            echo "Missing ${deploy_path}/.env.production"
+            exit 1
+          }
+          chmod 600 .env.production
+
+          if test -f docker-compose.yml; then
+            cp docker-compose.yml docker-compose.yml.previous
+          fi
+          mv docker-compose.yml.next docker-compose.yml
+
+          export APP_IMAGE="${image_ref}"
+          if ! docker compose --env-file .env.production config --quiet; then
+            test ! -f docker-compose.yml.previous ||
+              mv docker-compose.yml.previous docker-compose.yml
+            exit 1
+          fi
+
+          docker compose --env-file .env.production pull api migrate
+          docker compose --env-file .env.production up \
+            --detach --remove-orphans --wait --wait-timeout 180
+          docker compose --env-file .env.production ps
+          if test -f .deployed-image; then
+            cp .deployed-image .previous-image
+          fi
+          printf '%s\n' "${image_ref}" > .deployed-image
+          REMOTE

@@ -19,6 +19,13 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(PinoLogger));
   app.enableShutdownHooks();
   app.setGlobalPrefix("api/v1");
+  const trustProxyHops = config.get<number>("TRUST_PROXY_HOPS", 0);
+  if (trustProxyHops > 0) {
+    const express = app.getHttpAdapter().getInstance() as {
+      set(name: string, value: number): void;
+    };
+    express.set("trust proxy", trustProxyHops);
+  }
   const bodyLimit = config.get<string>("HTTP_BODY_LIMIT", "10mb");
   app.use(json({ limit: bodyLimit }));
   app.use(urlencoded({ extended: true, limit: bodyLimit }));
