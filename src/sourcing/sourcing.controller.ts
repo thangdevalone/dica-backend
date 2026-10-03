@@ -15,6 +15,8 @@ import { ConfigAudit } from "../common/audit/config-audit.decorator.js";
 import { PaginationDto } from "../common/dto/pagination.dto.js";
 import {
   BulkSourceRuleDto,
+  EligibilityListQueryDto,
+  SourceRuleListQueryDto,
   UpsertEligibilityDto,
   UpsertSourceRuleDto,
 } from "./sourcing.dto.js";
@@ -27,7 +29,7 @@ export class SourcingController {
   constructor(private s: SourcingService) {}
   @Get("item-eligibility") @RequirePermissions("eligibility.read") e(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: EligibilityListQueryDto,
   ) {
     return this.s.eligibility(u, q);
   }
@@ -39,7 +41,7 @@ export class SourcingController {
   }
   @Get("source-rules") @RequirePermissions("source_rule.read") r(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: SourceRuleListQueryDto,
   ) {
     return this.s.rules(u, q);
   }

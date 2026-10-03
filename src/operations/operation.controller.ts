@@ -13,11 +13,13 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
 import {
+  AdjustmentListQueryDto,
   CreateAdjustmentDto,
   CreateDamageDto,
   CreateStocktakeDto,
+  DamageListQueryDto,
+  StocktakeListQueryDto,
   UpdateDamageDto,
   UpdateStocktakeDto,
   VersionDto,
@@ -32,7 +34,10 @@ export class OperationController {
 
   @Get("inventory-adjustments")
   @RequirePermissions("adjustment.read")
-  adjustments(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  adjustments(
+    @CurrentUser() user: AuthUser,
+    @Query() query: AdjustmentListQueryDto,
+  ) {
     return this.service.adjustments(user, query);
   }
 
@@ -68,7 +73,10 @@ export class OperationController {
 
   @Get("stocktakes")
   @RequirePermissions("stocktake.read")
-  stocktakes(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  stocktakes(
+    @CurrentUser() user: AuthUser,
+    @Query() query: StocktakeListQueryDto,
+  ) {
     return this.service.stocktakes(user, query);
   }
 
@@ -113,7 +121,7 @@ export class OperationController {
 
   @Get("damage-reports")
   @RequirePermissions("damage.read")
-  damages(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  damages(@CurrentUser() user: AuthUser, @Query() query: DamageListQueryDto) {
     return this.service.damages(user, query);
   }
 

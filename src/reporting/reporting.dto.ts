@@ -1,4 +1,6 @@
-import { IsInt, IsString, Matches, Min } from "class-validator";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { IsInt, IsOptional, IsString, IsUUID, Matches, Min } from "class-validator";
+import { PaginationDto } from "../common/dto/pagination.dto.js";
 
 export class UpdatePaymentDto {
   @IsString()
@@ -8,4 +10,11 @@ export class UpdatePaymentDto {
   @IsInt()
   @Min(0)
   expected_version!: number;
+}
+
+export class ReportQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã cơ sở không hợp lệ." })
+  facility_id?: string;
 }

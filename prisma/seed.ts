@@ -119,6 +119,7 @@ const permissions = [
   "notification.mark_own",
   "backup.manage",
   "supplier_order.read_own",
+  "dashboard.read",
 ] as const;
 const rolePermissions: Record<string, readonly string[]> = {
   ADMIN_OWNER: permissions.filter(
@@ -163,6 +164,7 @@ const rolePermissions: Record<string, readonly string[]> = {
     "damage.read",
     "notification.read_own",
     "notification.mark_own",
+    "dashboard.read",
   ],
   BRANCH_STAFF: [
     "facility.read",
@@ -192,6 +194,7 @@ const rolePermissions: Record<string, readonly string[]> = {
     "damage.submit",
     "notification.read_own",
     "notification.mark_own",
+    "dashboard.read",
   ],
   WAREHOUSE_STAFF: [
     "facility.read",
@@ -227,6 +230,7 @@ const rolePermissions: Record<string, readonly string[]> = {
     "damage.submit",
     "notification.read_own",
     "notification.mark_own",
+    "dashboard.read",
   ],
   SUPPLIER: [
     "supplier_order.read_own",

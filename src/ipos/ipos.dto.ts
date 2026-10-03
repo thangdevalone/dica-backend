@@ -1,8 +1,10 @@
 import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsEnum,
   IsISO8601,
   IsOptional,
   IsString,
@@ -11,6 +13,34 @@ import {
   Matches,
   ValidateNested,
 } from "class-validator";
+import { PaginationDto } from "../common/dto/pagination.dto.js";
+import { VarianceDataStatus } from "../generated/prisma/enums.js";
+
+export class IposListQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã cơ sở không hợp lệ." })
+  facility_id?: string;
+}
+
+export class RecipeListQueryDto extends IposListQueryDto {
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã mapping không hợp lệ." })
+  mapping_id?: string;
+}
+
+export class VarianceListQueryDto extends IposListQueryDto {
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã kiểm kê không hợp lệ." })
+  stocktake_id?: string;
+
+  @ApiPropertyOptional({ enum: VarianceDataStatus })
+  @IsOptional()
+  @IsEnum(VarianceDataStatus, { message: "Trạng thái dữ liệu không hợp lệ." })
+  data_status?: VarianceDataStatus;
+}
 
 export class CreateMappingDto {
   @IsUUID()

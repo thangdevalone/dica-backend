@@ -9,10 +9,15 @@ import {
   paginateById,
 } from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type {
   CreateDepartmentDto,
   CreateFacilityDto,
   CreateStockLocationDto,
+  OrganizationListQueryDto,
+  UpdateDepartmentDto,
+  UpdateFacilityDto,
+  UpdateStockLocationDto,
 } from "./organization.dto.js";
 @Injectable()
 export class OrganizationService {
@@ -66,32 +71,33 @@ export class OrganizationService {
     });
     return { data, message: "Tạo cơ sở thành công." };
   }
-  async locations(u: AuthUser, q: PaginationDto) {
+  async locations(u: AuthUser, q: OrganizationListQueryDto) {
     const access = this.scope.constraintsFor(u, "stock_location.read", [
       "facilityId",
       "stockLocationId",
     ]);
     const search = normalizedSearch(q);
-    const where = {
+    const and: Prisma.StockLocationWhereInput[] = [];
+    if (access)
+      and.push({
+        OR: access.map((item) => ({
+          ...(item.facilityId ? { facilityId: item.facilityId } : {}),
+          ...(item.stockLocationId ? { id: item.stockLocationId } : {}),
+        })),
+      });
+    if (search)
+      and.push({
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" } },
+        ],
+      });
+    const where: Prisma.StockLocationWhereInput = {
       facility: {
         organizationId: u.organizationId,
       },
-      ...(access
-        ? {
-            OR: access.map((item) => ({
-              ...(item.facilityId ? { facilityId: item.facilityId } : {}),
-              ...(item.stockLocationId ? { id: item.stockLocationId } : {}),
-            })),
-          }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { code: { contains: search, mode: "insensitive" as const } },
-              { name: { contains: search, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
+      ...(q.facility_id ? { facilityId: q.facility_id } : {}),
+      ...(and.length ? { AND: and } : {}),
     };
     const { data, meta } = await paginateById(
       q,
@@ -128,36 +134,37 @@ export class OrganizationService {
     });
     return { data, message: "Tạo kho thành công." };
   }
-  async departments(u: AuthUser, q: PaginationDto) {
+  async departments(u: AuthUser, q: OrganizationListQueryDto) {
     const access = this.scope.constraintsFor(u, "department.read", [
       "facilityId",
       "stockLocationId",
       "departmentId",
     ]);
     const search = normalizedSearch(q);
-    const where = {
+    const and: Prisma.DepartmentWhereInput[] = [];
+    if (access)
+      and.push({
+        OR: access.map((item) => ({
+          ...(item.facilityId ? { facilityId: item.facilityId } : {}),
+          ...(item.stockLocationId
+            ? { stockLocationId: item.stockLocationId }
+            : {}),
+          ...(item.departmentId ? { id: item.departmentId } : {}),
+        })),
+      });
+    if (search)
+      and.push({
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { name: { contains: search, mode: "insensitive" } },
+        ],
+      });
+    const where: Prisma.DepartmentWhereInput = {
       facility: {
         organizationId: u.organizationId,
       },
-      ...(access
-        ? {
-            OR: access.map((item) => ({
-              ...(item.facilityId ? { facilityId: item.facilityId } : {}),
-              ...(item.stockLocationId
-                ? { stockLocationId: item.stockLocationId }
-                : {}),
-              ...(item.departmentId ? { id: item.departmentId } : {}),
-            })),
-          }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { code: { contains: search, mode: "insensitive" as const } },
-              { name: { contains: search, mode: "insensitive" as const } },
-            ],
-          }
-        : {}),
+      ...(q.facility_id ? { facilityId: q.facility_id } : {}),
+      ...(and.length ? { AND: and } : {}),
     };
     const { data, meta } = await paginateById(
       q,
@@ -203,6 +210,84 @@ export class OrganizationService {
       },
     });
     return { data, message: "Tạo bộ phận thành công." };
+  }
+  async updateFacility(u: AuthUser, id: string, d: UpdateFacilityDto) {
+    const facility = await this.db.facility.findFirst({
+      where: { id, organizationId: u.organizationId },
+    });
+    if (!facility) this.notFound("cơ sở");
+    this.scope.assertAccess(u, "facility.manage", { facilityId: id });
+    const data = await this.db.facility.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.type !== undefined ? { type: d.type } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+    });
+    return { data, message: "Cập nhật cơ sở thành công." };
+  }
+  async updateLocation(u: AuthUser, id: string, d: UpdateStockLocationDto) {
+    const location = await this.db.stockLocation.findFirst({
+      where: { id, facility: { organizationId: u.organizationId } },
+    });
+    if (!location) this.notFound("kho");
+    this.scope.assertAccess(u, "stock_location.manage", {
+      facilityId: location.facilityId,
+      stockLocationId: location.id,
+    });
+    if (d.active === false) {
+      const stocked = await this.db.stockBalance.count({
+        where: { stockLocationId: id, quantity: { not: 0 } },
+      });
+      if (stocked)
+        this.invalid("Kho vẫn còn tồn; hãy điều chỉnh về 0 trước khi ngừng.");
+    }
+    const data = await this.db.stockLocation.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+      include: { facility: true },
+    });
+    return { data, message: "Cập nhật kho thành công." };
+  }
+  async updateDepartment(u: AuthUser, id: string, d: UpdateDepartmentDto) {
+    const department = await this.db.department.findFirst({
+      where: { id, facility: { organizationId: u.organizationId } },
+    });
+    if (!department) this.notFound("bộ phận");
+    this.scope.assertAccess(u, "department.manage", {
+      facilityId: department.facilityId,
+    });
+    if (
+      d.stock_location_id &&
+      !(await this.db.stockLocation.count({
+        where: { id: d.stock_location_id, facilityId: department.facilityId },
+      }))
+    )
+      this.invalid("Kho không thuộc cơ sở của bộ phận.");
+    const data = await this.db.department.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.type !== undefined ? { type: d.type } : {}),
+        ...(d.stock_location_id !== undefined
+          ? { stockLocationId: d.stock_location_id }
+          : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+      include: { facility: true, stockLocation: true },
+    });
+    return { data, message: "Cập nhật bộ phận thành công." };
+  }
+  private notFound(label: string): never {
+    throw new ApiException(
+      ErrorCode.RESOURCE_NOT_FOUND,
+      `Không tìm thấy ${label} hoặc bạn không có quyền truy cập.`,
+      HttpStatus.NOT_FOUND,
+    );
   }
   private async assertFacility(u: AuthUser, id: string) {
     if (

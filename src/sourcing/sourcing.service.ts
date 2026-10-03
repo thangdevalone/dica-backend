@@ -4,11 +4,16 @@ import { ScopeService } from "../auth/scope.service.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
 import type { PaginationDto } from "../common/dto/pagination.dto.js";
-import { paginateById } from "../common/pagination/pagination.js";
+import {
+  normalizedSearch,
+  paginateById,
+} from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { SourceType, type Prisma } from "../generated/prisma/client.js";
 import type {
   BulkSourceRuleDto,
+  EligibilityListQueryDto,
+  SourceRuleListQueryDto,
   UpsertEligibilityDto,
   UpsertSourceRuleDto,
 } from "./sourcing.dto.js";
@@ -18,21 +23,54 @@ export class SourcingService {
     private db: PrismaService,
     private scope: ScopeService,
   ) {}
-  async eligibility(u: AuthUser, q: PaginationDto) {
+  async eligibility(u: AuthUser, q: EligibilityListQueryDto) {
     const access = this.scope.constraintsFor(u, "eligibility.read", [
       "facilityId",
       "departmentId",
     ]);
-    const where = {
+    const search = normalizedSearch(q);
+    const where: Prisma.ItemEligibilityWhereInput = {
       facility: { organizationId: u.organizationId },
-      ...(access
-        ? {
-            OR: access.map((item) => ({
-              ...(item.facilityId ? { facilityId: item.facilityId } : {}),
-              ...(item.departmentId ? { departmentId: item.departmentId } : {}),
-            })),
-          }
-        : {}),
+      ...(q.facility_id ? { facilityId: q.facility_id } : {}),
+      ...(q.department_id ? { departmentId: q.department_id } : {}),
+      ...(q.ingredient_id ? { ingredientId: q.ingredient_id } : {}),
+      AND: [
+        ...(access
+          ? [
+              {
+                OR: access.map((item) => ({
+                  ...(item.facilityId ? { facilityId: item.facilityId } : {}),
+                  ...(item.departmentId
+                    ? { departmentId: item.departmentId }
+                    : {}),
+                })),
+              },
+            ]
+          : []),
+        ...(search
+          ? [
+              {
+                OR: [
+                  {
+                    ingredient: {
+                      name: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                  {
+                    ingredient: {
+                      code: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                  {
+                    department: {
+                      name: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
     };
     const { data, meta } = await paginateById(
       q,
@@ -50,6 +88,7 @@ export class SourcingService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.itemEligibility.count({ where }),
+      { searchHandled: true },
     );
     return {
       data,
@@ -94,11 +133,35 @@ export class SourcingService {
     });
     return { data, message: "Cập nhật quyền xin hàng thành công." };
   }
-  async rules(u: AuthUser, q: PaginationDto) {
+  async rules(u: AuthUser, q: SourceRuleListQueryDto) {
     const ids = this.scope.facilityIds(u, "source_rule.read");
-    const where = {
+    const search = normalizedSearch(q);
+    const where: Prisma.SourceRuleWhereInput = {
       facility: { organizationId: u.organizationId },
-      ...(ids ? { facilityId: { in: ids } } : {}),
+      AND: [
+        ...(ids ? [{ facilityId: { in: ids } }] : []),
+        ...(q.facility_id ? [{ facilityId: q.facility_id }] : []),
+        ...(q.ingredient_id ? [{ ingredientId: q.ingredient_id }] : []),
+        ...(q.source_type ? [{ sourceType: q.source_type }] : []),
+        ...(search
+          ? [
+              {
+                OR: [
+                  {
+                    ingredient: {
+                      name: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                  {
+                    ingredient: {
+                      code: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
     };
     const { data, meta } = await paginateById(
       q,
@@ -107,8 +170,8 @@ export class SourcingService {
           where,
           include: {
             facility: true,
-            ingredient: true,
-            sourceStockLocation: true,
+            ingredient: { include: { baseUnit: true } },
+            sourceStockLocation: { include: { facility: true } },
             supplier: true,
           },
           orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
@@ -117,6 +180,7 @@ export class SourcingService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.sourceRule.count({ where }),
+      { searchHandled: true },
     );
     return {
       data,

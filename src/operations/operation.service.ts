@@ -18,13 +18,32 @@ import {
   StocktakeStatus,
 } from "../generated/prisma/client.js";
 import type {
+  AdjustmentListQueryDto,
   CreateAdjustmentDto,
   CreateDamageDto,
   CreateStocktakeDto,
+  DamageListQueryDto,
+  OperationListQueryDto,
+  StocktakeListQueryDto,
   UpdateDamageDto,
   UpdateStocktakeDto,
   VersionDto,
 } from "./operation.dto.js";
+
+/** Bộ lọc kho/cơ sở chung cho các danh sách nghiệp vụ kho. */
+function locationFilter(query: OperationListQueryDto) {
+  if (!query.facility_id && !query.stock_location_id) return {};
+  return {
+    AND: [
+      {
+        stockLocation: {
+          ...(query.facility_id ? { facilityId: query.facility_id } : {}),
+          ...(query.stock_location_id ? { id: query.stock_location_id } : {}),
+        },
+      },
+    ],
+  };
+}
 
 @Injectable()
 export class OperationService {
@@ -35,13 +54,15 @@ export class OperationService {
     private readonly idempotency: IdempotencyService,
   ) {}
 
-  async adjustments(user: AuthUser, query: PaginationDto) {
+  async adjustments(user: AuthUser, query: AdjustmentListQueryDto) {
     const access = this.scope.constraintsFor(user, "adjustment.read", [
       "facilityId",
       "stockLocationId",
       "createdById",
     ]);
     const where: Prisma.InventoryAdjustmentWhereInput = {
+      ...locationFilter(query),
+      ...(query.status ? { status: query.status } : {}),
       stockLocation: {
         facility: {
           organizationId: user.organizationId,
@@ -335,13 +356,15 @@ export class OperationService {
     };
   }
 
-  async stocktakes(user: AuthUser, query: PaginationDto) {
+  async stocktakes(user: AuthUser, query: StocktakeListQueryDto) {
     const access = this.scope.constraintsFor(user, "stocktake.read", [
       "facilityId",
       "stockLocationId",
       "createdById",
     ]);
     const where: Prisma.StocktakeWhereInput = {
+      ...locationFilter(query),
+      ...(query.status ? { status: query.status } : {}),
       stockLocation: {
         facility: {
           organizationId: user.organizationId,
@@ -366,7 +389,9 @@ export class OperationService {
           where,
           include: {
             stockLocation: { include: { facility: true } },
-            lines: true,
+            lines: {
+              include: { ingredient: { include: { baseUnit: true } } },
+            },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),
@@ -642,13 +667,15 @@ export class OperationService {
     return { data, message: "Mở lại kiểm kê theo policy demo thành công." };
   }
 
-  async damages(user: AuthUser, query: PaginationDto) {
+  async damages(user: AuthUser, query: DamageListQueryDto) {
     const access = this.scope.constraintsFor(user, "damage.read", [
       "facilityId",
       "stockLocationId",
       "createdById",
     ]);
     const where: Prisma.DamageReportWhereInput = {
+      ...locationFilter(query),
+      ...(query.status ? { status: query.status } : {}),
       stockLocation: {
         facility: {
           organizationId: user.organizationId,
@@ -673,7 +700,7 @@ export class OperationService {
           where,
           include: {
             stockLocation: { include: { facility: true } },
-            lines: true,
+            lines: { include: { ingredient: true } },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),

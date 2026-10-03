@@ -10,7 +10,11 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
+import {
+  InventoryListQueryDto,
+  LedgerListQueryDto,
+  NotificationListQueryDto,
+} from "./inventory.dto.js";
 import { InventoryService } from "./inventory.service.js";
 @ApiTags("Tồn kho và thông báo")
 @ApiBearerAuth()
@@ -19,20 +23,29 @@ export class InventoryController {
   constructor(private s: InventoryService) {}
   @Get("stock-balances") @RequirePermissions("stock.read") balances(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: InventoryListQueryDto,
   ) {
     return this.s.balances(u, q);
   }
   @Get("stock-ledger") @RequirePermissions("stock_ledger.read") ledger(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: LedgerListQueryDto,
   ) {
     return this.s.ledger(u, q);
   }
   @Get("notifications")
   @RequirePermissions("notification.read_own")
-  notifications(@CurrentUser() u: AuthUser, @Query() q: PaginationDto) {
+  notifications(
+    @CurrentUser() u: AuthUser,
+    @Query() q: NotificationListQueryDto,
+  ) {
     return this.s.notifications(u, q);
+  }
+
+  @Post("notifications/read-all")
+  @RequirePermissions("notification.mark_own")
+  markAllNotificationsRead(@CurrentUser() u: AuthUser) {
+    return this.s.markAllNotificationsRead(u);
   }
 
   @Get("notifications/:id")

@@ -1,9 +1,11 @@
 import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +15,18 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+import { PaginationDto } from "../common/dto/pagination.dto.js";
+import { DocumentStatus } from "../generated/prisma/enums.js";
+export class RequestListQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ enum: DocumentStatus })
+  @IsOptional()
+  @IsEnum(DocumentStatus, { message: "Trạng thái yêu cầu không hợp lệ." })
+  status?: DocumentStatus;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  facility_id?: string;
+}
 export class CreateRequestLineDto {
   @IsUUID() ingredient_id!: string;
   @IsUUID() unit_id!: string;

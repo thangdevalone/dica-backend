@@ -8,7 +8,7 @@ import { paginateById } from "../common/pagination/pagination.js";
 import { IdempotencyService } from "../common/idempotency/idempotency.service.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { PaymentStatus, Prisma, UserKind } from "../generated/prisma/client.js";
-import type { UpdatePaymentDto } from "./reporting.dto.js";
+import type { ReportQueryDto, UpdatePaymentDto } from "./reporting.dto.js";
 
 @Injectable()
 export class ReportingService {
@@ -143,11 +143,12 @@ export class ReportingService {
     };
   }
 
-  async stockReport(user: AuthUser, query: PaginationDto) {
+  async stockReport(user: AuthUser, query: ReportQueryDto) {
     const where: Prisma.StockBalanceWhereInput = {
       stockLocation: {
         facility: { organizationId: user.organizationId },
         ...this.stockLocationScope(user, "report.stock"),
+        ...this.facilityFilter(query),
       },
     };
     const { data, meta } = await paginateById(
@@ -173,13 +174,13 @@ export class ReportingService {
     };
   }
 
-  async fulfillmentReport(user: AuthUser, query: PaginationDto) {
+  async fulfillmentReport(user: AuthUser, query: ReportQueryDto) {
     const where: Prisma.FulfillmentOrderWhereInput = {
       organizationId: user.organizationId,
-      destinationStockLocation: this.stockLocationScope(
-        user,
-        "report.fulfillment",
-      ),
+      destinationStockLocation: {
+        ...this.stockLocationScope(user, "report.fulfillment"),
+        ...this.facilityFilter(query),
+      },
     };
     const { data, meta } = await paginateById(
       query,
@@ -188,7 +189,7 @@ export class ReportingService {
           where,
           include: {
             supplier: true,
-            sourceStockLocation: true,
+            sourceStockLocation: { include: { facility: true } },
             destinationStockLocation: { include: { facility: true } },
             lines: true,
           },
@@ -206,11 +207,12 @@ export class ReportingService {
     };
   }
 
-  async damageReport(user: AuthUser, query: PaginationDto) {
+  async damageReport(user: AuthUser, query: ReportQueryDto) {
     const where: Prisma.DamageReportWhereInput = {
       stockLocation: {
         facility: { organizationId: user.organizationId },
         ...this.stockLocationScope(user, "report.damage"),
+        ...this.facilityFilter(query),
       },
     };
     const { data, meta } = await paginateById(
@@ -220,7 +222,7 @@ export class ReportingService {
           where,
           include: {
             stockLocation: { include: { facility: true } },
-            lines: true,
+            lines: { include: { ingredient: true } },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),
@@ -236,10 +238,13 @@ export class ReportingService {
     };
   }
 
-  async varianceReport(user: AuthUser, query: PaginationDto) {
+  async varianceReport(user: AuthUser, query: ReportQueryDto) {
     const where: Prisma.VarianceResultWhereInput = {
       organizationId: user.organizationId,
-      stockLocation: this.stockLocationScope(user, "report.variance"),
+      stockLocation: {
+        ...this.stockLocationScope(user, "report.variance"),
+        ...this.facilityFilter(query),
+      },
     };
     const { data, meta } = await paginateById(
       query,
@@ -265,15 +270,15 @@ export class ReportingService {
     };
   }
 
-  async paymentReport(user: AuthUser, query: PaginationDto) {
+  async paymentReport(user: AuthUser, query: ReportQueryDto) {
     this.assertInternal(user);
     const where: Prisma.PaymentTrackingWhereInput = {
       order: {
         organizationId: user.organizationId,
-        destinationStockLocation: this.stockLocationScope(
-          user,
-          "report.payment",
-        ),
+        destinationStockLocation: {
+          ...this.stockLocationScope(user, "report.payment"),
+          ...this.facilityFilter(query),
+        },
       },
     };
     const { data, meta } = await paginateById(
@@ -338,6 +343,11 @@ export class ReportingService {
         })
       : false;
     if (!destination && !source) this.notFound();
+  }
+
+  /** Lọc theo cơ sở do người dùng chọn (AND với phạm vi quyền). */
+  private facilityFilter(query: ReportQueryDto): Prisma.StockLocationWhereInput {
+    return query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {};
   }
 
   private stockLocationScope(

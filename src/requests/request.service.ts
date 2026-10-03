@@ -6,7 +6,10 @@ import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
 import { IdempotencyService } from "../common/idempotency/idempotency.service.js";
-import { paginateById } from "../common/pagination/pagination.js";
+import {
+  normalizedSearch,
+  paginateById,
+} from "../common/pagination/pagination.js";
 import { assertPositiveDecimal } from "../common/utils/decimal.js";
 import { PrismaService } from "../database/prisma.service.js";
 import {
@@ -21,6 +24,7 @@ import type {
   CreateRequestDto,
   CreateRequestLineDto,
   RejectRequestDto,
+  RequestListQueryDto,
   UpdateRequestDto,
   VersionCommandDto,
 } from "./request.dto.js";
@@ -31,14 +35,17 @@ export class RequestService {
     private scope: ScopeService,
     private idem: IdempotencyService,
   ) {}
-  async list(u: AuthUser, q: PaginationDto) {
+  async list(u: AuthUser, q: RequestListQueryDto) {
     const access = this.scope.constraintsFor(u, "request.read", [
       "facilityId",
       "departmentId",
       "createdById",
     ]);
+    const search = normalizedSearch(q);
     const where: Prisma.SupplyRequestWhereInput = {
       organizationId: u.organizationId,
+      ...(q.status ? { status: q.status } : {}),
+      ...(q.facility_id ? { facilityId: q.facility_id } : {}),
       ...(access
         ? {
             OR: access.map((item) => ({
@@ -46,6 +53,18 @@ export class RequestService {
               ...(item.departmentId ? { departmentId: item.departmentId } : {}),
               ...(item.createdById ? { createdById: item.createdById } : {}),
             })),
+          }
+        : {}),
+      ...(search
+        ? {
+            AND: [
+              {
+                OR: [
+                  { code: { contains: search, mode: "insensitive" as const } },
+                  { note: { contains: search, mode: "insensitive" as const } },
+                ],
+              },
+            ],
           }
         : {}),
     };
@@ -57,6 +76,7 @@ export class RequestService {
           include: {
             facility: true,
             department: true,
+            createdBy: { select: { id: true, displayName: true } },
             _count: { select: { lines: true, orders: true } },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -65,6 +85,7 @@ export class RequestService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.supplyRequest.count({ where }),
+      { searchHandled: true },
     );
     return {
       data,
@@ -77,8 +98,9 @@ export class RequestService {
       where: { id, organizationId: u.organizationId },
       include: {
         facility: true,
-        department: true,
-        lines: { include: { ingredient: true } },
+        department: { include: { stockLocation: true } },
+        createdBy: { select: { id: true, username: true, displayName: true } },
+        lines: { include: { ingredient: { include: { baseUnit: true } } } },
         approvals: true,
         orders: { include: { lines: true } },
       },

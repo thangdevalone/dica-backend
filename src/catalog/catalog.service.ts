@@ -302,6 +302,180 @@ export class CatalogService {
     return { data, message: "Tạo phiên bản quy đổi đơn vị thành công." };
   }
 
+  async supplierIngredients(u: AuthUser, q: D.SupplierIngredientQueryDto) {
+    this.scope.assertAccess(u, "supplier_ingredient.read", {});
+    const search = normalizedSearch(q);
+    const where: Prisma.SupplierIngredientWhereInput = {
+      supplier: { organizationId: u.organizationId },
+      ...(q.supplier_id ? { supplierId: q.supplier_id } : {}),
+      ...(q.ingredient_id ? { ingredientId: q.ingredient_id } : {}),
+      ...(search
+        ? {
+            OR: [
+              { supplierSku: { contains: search, mode: "insensitive" } },
+              {
+                ingredient: {
+                  OR: [
+                    { code: { contains: search, mode: "insensitive" } },
+                    { name: { contains: search, mode: "insensitive" } },
+                  ],
+                },
+              },
+              {
+                supplier: {
+                  OR: [
+                    { code: { contains: search, mode: "insensitive" } },
+                    { name: { contains: search, mode: "insensitive" } },
+                  ],
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+    const { data, meta } = await paginateById(
+      q,
+      ({ skip, take, cursorId }) =>
+        this.db.supplierIngredient.findMany({
+          where,
+          include: {
+            supplier: true,
+            ingredient: { include: { baseUnit: true } },
+          },
+          orderBy: [{ supplierId: "asc" }, { id: "asc" }],
+          ...(skip !== undefined ? { skip } : {}),
+          take,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      () => this.db.supplierIngredient.count({ where }),
+      { searchHandled: true },
+    );
+    return {
+      data,
+      message: "Lấy danh sách nguyên liệu theo nhà cung ứng thành công.",
+      meta,
+    };
+  }
+
+  async updateUnit(u: AuthUser, id: string, d: D.UpdateUnitDto) {
+    this.scope.assertAccess(u, "unit.manage", {});
+    await this.assertOwned("unit", u, id);
+    const data = await this.db.unit.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.decimal_scale !== undefined
+          ? { decimalScale: d.decimal_scale }
+          : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+    });
+    return { data, message: "Cập nhật đơn vị thành công." };
+  }
+
+  async updateGroup(u: AuthUser, id: string, d: D.UpdateIngredientGroupDto) {
+    this.scope.assertAccess(u, "ingredient_group.manage", {});
+    await this.assertOwned("group", u, id);
+    const data = await this.db.ingredientGroup.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+    });
+    return { data, message: "Cập nhật nhóm nguyên liệu thành công." };
+  }
+
+  async updateIngredient(u: AuthUser, id: string, d: D.UpdateIngredientDto) {
+    this.scope.assertAccess(u, "ingredient.manage", {});
+    await this.assertOwned("ingredient", u, id);
+    if (d.group_id) {
+      const group = await this.db.ingredientGroup.count({
+        where: { id: d.group_id, organizationId: u.organizationId },
+      });
+      if (!group) this.invalid();
+    }
+    const data = await this.db.ingredient.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.group_id !== undefined ? { groupId: d.group_id } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+      include: { baseUnit: true, group: true },
+    });
+    return { data, message: "Cập nhật nguyên liệu thành công." };
+  }
+
+  async updateSupplier(u: AuthUser, id: string, d: D.UpdateSupplierDto) {
+    this.scope.assertAccess(u, "supplier.manage", {});
+    await this.assertOwned("supplier", u, id);
+    const data = await this.db.supplier.update({
+      where: { id },
+      data: {
+        ...(d.name !== undefined ? { name: d.name } : {}),
+        ...(d.phone !== undefined ? { phone: d.phone || null } : {}),
+        ...(d.email !== undefined ? { email: d.email || null } : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+    });
+    return { data, message: "Cập nhật nhà cung ứng thành công." };
+  }
+
+  async updateSupplierIngredient(
+    u: AuthUser,
+    id: string,
+    d: D.UpdateSupplierIngredientDto,
+  ) {
+    this.scope.assertAccess(u, "supplier_ingredient.manage", {});
+    const existing = await this.db.supplierIngredient.count({
+      where: { id, supplier: { organizationId: u.organizationId } },
+    });
+    if (!existing) this.notFound();
+    const data = await this.db.supplierIngredient.update({
+      where: { id },
+      data: {
+        ...(d.supplier_sku !== undefined
+          ? { supplierSku: d.supplier_sku || null }
+          : {}),
+        ...(d.reference_price !== undefined
+          ? { referencePrice: d.reference_price }
+          : {}),
+        ...(d.active !== undefined ? { active: d.active } : {}),
+      },
+      include: { supplier: true, ingredient: { include: { baseUnit: true } } },
+    });
+    return {
+      data,
+      message: "Cập nhật liên kết nhà cung ứng - nguyên liệu thành công.",
+    };
+  }
+
+  private async assertOwned(
+    type: "unit" | "group" | "ingredient" | "supplier",
+    u: AuthUser,
+    id: string,
+  ) {
+    const where = { id, organizationId: u.organizationId };
+    const count =
+      type === "unit"
+        ? await this.db.unit.count({ where })
+        : type === "group"
+          ? await this.db.ingredientGroup.count({ where })
+          : type === "ingredient"
+            ? await this.db.ingredient.count({ where })
+            : await this.db.supplier.count({ where });
+    if (!count) this.notFound();
+  }
+
+  private notFound(): never {
+    throw new ApiException(
+      ErrorCode.RESOURCE_NOT_FOUND,
+      "Không tìm thấy dữ liệu danh mục hoặc bạn không có quyền truy cập.",
+      HttpStatus.NOT_FOUND,
+    );
+  }
+
   private invalidMessage(message: string): never {
     throw new ApiException(
       ErrorCode.VALIDATION_ERROR,

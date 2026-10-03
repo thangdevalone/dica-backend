@@ -1,8 +1,10 @@
 import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -12,6 +14,7 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+import { PaginationDto } from "../common/dto/pagination.dto.js";
 export class QuantityLineDto {
   @IsUUID() order_line_id!: string;
   @IsString() @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/) quantity!: string;
@@ -39,6 +42,29 @@ export class CreateReceiptDto {
 }
 export class PostDocumentDto {
   @IsInt() @Min(1) expected_version!: number;
+}
+
+export class DeliveryListQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã đơn không hợp lệ." })
+  order_id?: string;
+
+  @ApiPropertyOptional({
+    enum: ["DRAFT", "POSTED", "PENDING_EXCESS_REVIEW", "CANCELLED"],
+  })
+  @IsOptional()
+  @IsIn(["DRAFT", "POSTED", "PENDING_EXCESS_REVIEW", "CANCELLED"], {
+    message: "Trạng thái chứng từ không hợp lệ.",
+  })
+  status?: "DRAFT" | "POSTED" | "PENDING_EXCESS_REVIEW" | "CANCELLED";
+}
+
+export class DiscrepancyListQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ enum: ["OPEN", "RESOLVED"] })
+  @IsOptional()
+  @IsIn(["OPEN", "RESOLVED"], { message: "Trạng thái chênh lệch không hợp lệ." })
+  status?: "OPEN" | "RESOLVED";
 }
 
 export class ResolveDiscrepancyDto {

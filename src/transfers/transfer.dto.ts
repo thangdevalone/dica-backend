@@ -1,8 +1,10 @@
 import { Type } from "class-transformer";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -12,6 +14,20 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
+import { PaginationDto } from "../common/dto/pagination.dto.js";
+import { TransferStatus } from "../generated/prisma/enums.js";
+
+export class TransferListQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ enum: TransferStatus })
+  @IsOptional()
+  @IsEnum(TransferStatus, { message: "Trạng thái điều chuyển không hợp lệ." })
+  status?: TransferStatus;
+
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã cơ sở không hợp lệ." })
+  facility_id?: string;
+}
 
 export class CreateTransferLineDto {
   @IsUUID()

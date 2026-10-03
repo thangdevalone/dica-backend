@@ -1,27 +1,46 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth.types.js";
 import { ScopeService } from "../auth/scope.service.js";
-import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
 import { paginateById } from "../common/pagination/pagination.js";
+import type { Prisma } from "../generated/prisma/client.js";
+import type {
+  InventoryListQueryDto,
+  LedgerListQueryDto,
+  NotificationListQueryDto,
+} from "./inventory.dto.js";
 @Injectable()
 export class InventoryService {
   constructor(
     private db: PrismaService,
     private scope: ScopeService,
   ) {}
-  async balances(u: AuthUser, q: PaginationDto) {
+  async balances(u: AuthUser, q: InventoryListQueryDto) {
     const access = this.scope.constraintsFor(u, "stock.read", [
       "facilityId",
       "stockLocationId",
     ]);
-    const where = {
+    const search = q.search?.trim();
+    const where: Prisma.StockBalanceWhereInput = {
+      ...(q.stock_location_id ? { stockLocationId: q.stock_location_id } : {}),
+      ...(q.ingredient_id ? { ingredientId: q.ingredient_id } : {}),
+      ...(search
+        ? {
+            ingredient: {
+              OR: [
+                { code: { contains: search, mode: "insensitive" } },
+                { name: { contains: search, mode: "insensitive" } },
+              ],
+            },
+          }
+        : {}),
       stockLocation: {
         facility: {
           organizationId: u.organizationId,
         },
+        ...(q.facility_id ? { facilityId: q.facility_id } : {}),
         ...(access
           ? {
               OR: access.map((item) => ({
@@ -47,6 +66,7 @@ export class InventoryService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.stockBalance.count({ where }),
+      { searchHandled: true },
     );
     return {
       data,
@@ -54,16 +74,20 @@ export class InventoryService {
       meta,
     };
   }
-  async ledger(u: AuthUser, q: PaginationDto) {
+  async ledger(u: AuthUser, q: LedgerListQueryDto) {
     const access = this.scope.constraintsFor(u, "stock_ledger.read", [
       "facilityId",
       "stockLocationId",
     ]);
-    const where = {
+    const where: Prisma.StockLedgerEntryWhereInput = {
+      ...(q.stock_location_id ? { stockLocationId: q.stock_location_id } : {}),
+      ...(q.ingredient_id ? { ingredientId: q.ingredient_id } : {}),
+      ...(q.entry_type ? { entryType: q.entry_type } : {}),
       stockLocation: {
         facility: {
           organizationId: u.organizationId,
         },
+        ...(q.facility_id ? { facilityId: q.facility_id } : {}),
         ...(access
           ? {
               OR: access.map((item) => ({
@@ -79,7 +103,10 @@ export class InventoryService {
       ({ skip, take, cursorId }) =>
         this.db.stockLedgerEntry.findMany({
           where,
-          include: { stockLocation: true, ingredient: true },
+          include: {
+            stockLocation: true,
+            ingredient: { include: { baseUnit: true } },
+          },
           orderBy: [{ postedAt: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),
           take,
@@ -93,8 +120,12 @@ export class InventoryService {
       meta,
     };
   }
-  async notifications(u: AuthUser, q: PaginationDto) {
-    const where = { organizationId: u.organizationId, userId: u.id };
+  async notifications(u: AuthUser, q: NotificationListQueryDto) {
+    const where = {
+      organizationId: u.organizationId,
+      userId: u.id,
+      ...(q.status ? { status: q.status } : {}),
+    };
     const { data, meta } = await paginateById(
       q,
       ({ skip, take, cursorId }) =>
@@ -125,6 +156,21 @@ export class InventoryService {
       notification.resourceId,
     );
     return { data: notification, message: "Mở thông báo thành công." };
+  }
+
+  async markAllNotificationsRead(u: AuthUser) {
+    const result = await this.db.notification.updateMany({
+      where: {
+        organizationId: u.organizationId,
+        userId: u.id,
+        status: "UNREAD",
+      },
+      data: { status: "READ", readAt: new Date() },
+    });
+    return {
+      data: { updated: result.count },
+      message: "Đã đánh dấu tất cả thông báo là đã đọc.",
+    };
   }
 
   async markNotificationRead(u: AuthUser, id: string) {

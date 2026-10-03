@@ -13,11 +13,11 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
 import {
   CancelRequestDto,
   CreateRequestDto,
   RejectRequestDto,
+  RequestListQueryDto,
   UpdateRequestDto,
   VersionCommandDto,
 } from "./request.dto.js";
@@ -29,7 +29,7 @@ export class RequestController {
   constructor(private s: RequestService) {}
   @Get() @RequirePermissions("request.read") list(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: RequestListQueryDto,
   ) {
     return this.s.list(u, q);
   }

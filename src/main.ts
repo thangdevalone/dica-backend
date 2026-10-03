@@ -31,12 +31,15 @@ async function bootstrap(): Promise<void> {
   app.use(urlencoded({ extended: true, limit: bodyLimit }));
   app.use(helmet());
   app.use(requestIdMiddleware);
+  const corsOrigins = config
+    .getOrThrow<string>("CORS_ORIGINS")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: config
-      .getOrThrow<string>("CORS_ORIGINS")
-      .split(",")
-      .map((x) => x.trim()),
+    origin: corsOrigins.includes("*") ? true : corsOrigins,
     credentials: false,
+    exposedHeaders: ["X-Request-Id"],
   });
   app.useGlobalPipes(
     new ValidationPipe({

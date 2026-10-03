@@ -3,7 +3,6 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { AuthUser } from "../auth/auth.types.js";
 import { ScopeService } from "../auth/scope.service.js";
-import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
 import { IdempotencyService } from "../common/idempotency/idempotency.service.js";
@@ -23,6 +22,8 @@ import {
 import type {
   CreateDispatchDto,
   CreateReceiptDto,
+  DeliveryListQueryDto,
+  DiscrepancyListQueryDto,
   PostDocumentDto,
   ResolveDiscrepancyDto,
 } from "./delivery.dto.js";
@@ -35,12 +36,13 @@ export class DeliveryService {
     private config: ConfigService,
   ) {}
 
-  async discrepancies(u: AuthUser, q: PaginationDto) {
+  async discrepancies(u: AuthUser, q: DiscrepancyListQueryDto) {
     const access = this.scope.constraintsFor(u, "discrepancy.read", [
       "facilityId",
       "stockLocationId",
     ]);
     const where: Prisma.DiscrepancyCaseWhereInput = {
+      ...(q.status ? { status: q.status } : {}),
       receipt: {
         order: {
           organizationId: u.organizationId,
@@ -70,7 +72,9 @@ export class DeliveryService {
                 order: { include: { destinationStockLocation: true } },
               },
             },
-            receiptLine: { include: { orderLine: true } },
+            receiptLine: {
+              include: { orderLine: { include: { ingredient: true } } },
+            },
           },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),
@@ -148,6 +152,137 @@ export class DeliveryService {
         "Xử lý chênh lệch thành công; thao tác này không tự điều chỉnh tồn kho.",
     };
   }
+  async dispatches(u: AuthUser, q: DeliveryListQueryDto) {
+    const where: Prisma.DispatchWhereInput = {
+      ...(q.order_id ? { orderId: q.order_id } : {}),
+      ...(q.status ? { status: q.status as DispatchStatus } : {}),
+      order: {
+        organizationId: u.organizationId,
+        sourceStockLocation: this.locationScope(u, "dispatch.read"),
+      },
+    };
+    const { data, meta } = await paginateById(
+      q,
+      ({ skip, take, cursorId }) =>
+        this.db.dispatch.findMany({
+          where,
+          include: {
+            order: {
+              include: {
+                sourceStockLocation: { include: { facility: true } },
+                destinationStockLocation: { include: { facility: true } },
+              },
+            },
+            _count: { select: { lines: true, receipts: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          ...(skip !== undefined ? { skip } : {}),
+          take,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      () => this.db.dispatch.count({ where }),
+    );
+    return { data, message: "Lấy danh sách phiếu xuất kho thành công.", meta };
+  }
+
+  async dispatch(u: AuthUser, id: string) {
+    const data = await this.db.dispatch.findFirst({
+      where: { id, order: { organizationId: u.organizationId } },
+      include: {
+        order: {
+          include: {
+            sourceStockLocation: { include: { facility: true } },
+            destinationStockLocation: { include: { facility: true } },
+          },
+        },
+        lines: { include: { orderLine: { include: { ingredient: true } } } },
+        receipts: true,
+      },
+    });
+    if (!data || !data.order.sourceStockLocation) this.notFound("phiếu xuất");
+    this.scope.assertAccess(u, "dispatch.read", {
+      facilityId: data.order.sourceStockLocation.facilityId,
+      stockLocationId: data.order.sourceStockLocation.id,
+    });
+    return { data, message: "Lấy chi tiết phiếu xuất kho thành công." };
+  }
+
+  async receipts(u: AuthUser, q: DeliveryListQueryDto) {
+    const where: Prisma.ReceiptWhereInput = {
+      ...(q.order_id ? { orderId: q.order_id } : {}),
+      ...(q.status ? { status: q.status as ReceiptStatus } : {}),
+      order: {
+        organizationId: u.organizationId,
+        destinationStockLocation: this.locationScope(u, "receipt.read"),
+      },
+    };
+    const { data, meta } = await paginateById(
+      q,
+      ({ skip, take, cursorId }) =>
+        this.db.receipt.findMany({
+          where,
+          include: {
+            order: {
+              include: {
+                supplier: true,
+                sourceStockLocation: { include: { facility: true } },
+                destinationStockLocation: { include: { facility: true } },
+              },
+            },
+            dispatch: true,
+            _count: { select: { lines: true, discrepancies: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          ...(skip !== undefined ? { skip } : {}),
+          take,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      () => this.db.receipt.count({ where }),
+    );
+    return { data, message: "Lấy danh sách phiếu nhận hàng thành công.", meta };
+  }
+
+  async receipt(u: AuthUser, id: string) {
+    const data = await this.db.receipt.findFirst({
+      where: { id, order: { organizationId: u.organizationId } },
+      include: {
+        order: {
+          include: {
+            supplier: true,
+            sourceStockLocation: { include: { facility: true } },
+            destinationStockLocation: { include: { facility: true } },
+          },
+        },
+        dispatch: true,
+        lines: { include: { orderLine: { include: { ingredient: true } } } },
+        discrepancies: true,
+      },
+    });
+    if (!data) this.notFound("phiếu nhận");
+    this.scope.assertAccess(u, "receipt.read", {
+      facilityId: data.order.destinationStockLocation.facilityId,
+      stockLocationId: data.order.destinationStockLocationId,
+    });
+    return { data, message: "Lấy chi tiết phiếu nhận hàng thành công." };
+  }
+
+  private locationScope(
+    u: AuthUser,
+    permission: string,
+  ): Prisma.StockLocationWhereInput {
+    const access = this.scope.constraintsFor(u, permission, [
+      "facilityId",
+      "stockLocationId",
+    ]);
+    if (access === null) return {};
+    return {
+      OR: access.map((item) => ({
+        ...(item.facilityId ? { facilityId: item.facilityId } : {}),
+        ...(item.stockLocationId ? { id: item.stockLocationId } : {}),
+      })),
+    };
+  }
+
   async createDispatch(u: AuthUser, d: CreateDispatchDto) {
     const o = await this.db.fulfillmentOrder.findFirst({
       where: { id: d.order_id, organizationId: u.organizationId },

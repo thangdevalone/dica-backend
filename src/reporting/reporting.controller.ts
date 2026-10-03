@@ -12,8 +12,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
-import { UpdatePaymentDto } from "./reporting.dto.js";
+import { ReportQueryDto, UpdatePaymentDto } from "./reporting.dto.js";
 import { ReportingService } from "./reporting.service.js";
 
 @ApiTags("Đối soát và báo cáo")
@@ -44,31 +43,34 @@ export class ReportingController {
 
   @Get("reports/stock")
   @RequirePermissions("report.stock")
-  stock(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  stock(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.stockReport(user, query);
   }
 
   @Get("reports/fulfillment")
   @RequirePermissions("report.fulfillment")
-  fulfillment(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  fulfillment(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.fulfillmentReport(user, query);
   }
 
   @Get("reports/damage")
   @RequirePermissions("report.damage")
-  damage(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  damage(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.damageReport(user, query);
   }
 
   @Get("reports/variance")
   @RequirePermissions("report.variance")
-  variance(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  variance(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.varianceReport(user, query);
   }
 
   @Get("reports/payment")
   @RequirePermissions("report.payment")
-  paymentReport(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  paymentReport(
+    @CurrentUser() user: AuthUser,
+    @Query() query: ReportQueryDto,
+  ) {
     return this.service.paymentReport(user, query);
   }
 }

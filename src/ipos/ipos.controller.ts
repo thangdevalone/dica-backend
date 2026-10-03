@@ -13,13 +13,15 @@ import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
 import { ConfigAudit } from "../common/audit/config-audit.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
 import {
   CreateAlertRuleDto,
   CreateMappingDto,
   CreateRecipeDto,
   CreateSalesImportDto,
+  IposListQueryDto,
   RecalculateVarianceDto,
+  RecipeListQueryDto,
+  VarianceListQueryDto,
 } from "./ipos.dto.js";
 import { IposService } from "./ipos.service.js";
 
@@ -35,9 +37,18 @@ export class IposController {
     return this.service.adapterStatus();
   }
 
+  @Get("sales-imports")
+  @RequirePermissions("sales_import.read")
+  salesImports(
+    @CurrentUser() user: AuthUser,
+    @Query() query: IposListQueryDto,
+  ) {
+    return this.service.salesImports(user, query);
+  }
+
   @Get("menu-item-mappings")
   @RequirePermissions("ipos_mapping.read")
-  mappings(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  mappings(@CurrentUser() user: AuthUser, @Query() query: IposListQueryDto) {
     return this.service.mappings(user, query);
   }
 
@@ -50,7 +61,7 @@ export class IposController {
 
   @Get("recipes")
   @RequirePermissions("recipe.read")
-  recipes(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  recipes(@CurrentUser() user: AuthUser, @Query() query: RecipeListQueryDto) {
     return this.service.recipes(user, query);
   }
 
@@ -100,7 +111,10 @@ export class IposController {
 
   @Get("variances")
   @RequirePermissions("variance.read")
-  variances(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  variances(
+    @CurrentUser() user: AuthUser,
+    @Query() query: VarianceListQueryDto,
+  ) {
     return this.service.variances(user, query);
   }
 
@@ -122,7 +136,7 @@ export class IposController {
 
   @Get("alert-rules")
   @RequirePermissions("alert_rule.manage")
-  alertRules(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  alertRules(@CurrentUser() user: AuthUser, @Query() query: IposListQueryDto) {
     return this.service.alertRules(user, query);
   }
 }

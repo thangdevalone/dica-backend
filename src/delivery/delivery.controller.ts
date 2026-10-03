@@ -12,10 +12,11 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
 import {
   CreateDispatchDto,
   CreateReceiptDto,
+  DeliveryListQueryDto,
+  DiscrepancyListQueryDto,
   PostDocumentDto,
   ResolveDiscrepancyDto,
 } from "./delivery.dto.js";
@@ -27,7 +28,10 @@ export class DeliveryController {
   constructor(private s: DeliveryService) {}
   @Get("discrepancies")
   @RequirePermissions("discrepancy.read")
-  discrepancies(@CurrentUser() u: AuthUser, @Query() q: PaginationDto) {
+  discrepancies(
+    @CurrentUser() u: AuthUser,
+    @Query() q: DiscrepancyListQueryDto,
+  ) {
     return this.s.discrepancies(u, q);
   }
   @Post("discrepancies/:id/resolve")
@@ -38,6 +42,32 @@ export class DeliveryController {
     @Body() d: ResolveDiscrepancyDto,
   ) {
     return this.s.resolveDiscrepancy(u, id, d);
+  }
+  @Get("dispatches")
+  @RequirePermissions("dispatch.read")
+  dispatches(@CurrentUser() u: AuthUser, @Query() q: DeliveryListQueryDto) {
+    return this.s.dispatches(u, q);
+  }
+  @Get("dispatches/:id")
+  @RequirePermissions("dispatch.read")
+  dispatchDetail(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.s.dispatch(u, id);
+  }
+  @Get("receipts")
+  @RequirePermissions("receipt.read")
+  receipts(@CurrentUser() u: AuthUser, @Query() q: DeliveryListQueryDto) {
+    return this.s.receipts(u, q);
+  }
+  @Get("receipts/:id")
+  @RequirePermissions("receipt.read")
+  receiptDetail(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.s.receipt(u, id);
   }
   @Post("dispatches") @RequirePermissions("dispatch.create") dispatch(
     @CurrentUser() u: AuthUser,

@@ -7,7 +7,8 @@ export class LoginDto {
   username!: string;
   @ApiProperty({ example: "MatKhauAnToan#2026" })
   @IsString()
-  @Length(8, 200, { message: "Mật khẩu phải có ít nhất 8 ký tự." })
+  // Chính sách độ dài chỉ áp dụng khi tạo/đặt lại mật khẩu; đăng nhập chỉ cần không rỗng.
+  @Length(1, 200, { message: "Vui lòng nhập mật khẩu." })
   password!: string;
   @ApiProperty({ example: "DICA" })
   @IsString()

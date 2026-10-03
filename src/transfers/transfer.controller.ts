@@ -13,12 +13,12 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
-import { PaginationDto } from "../common/dto/pagination.dto.js";
 import {
   CancelTransferDto,
   CreateTransferDto,
   RejectTransferDto,
   TransferCommandDto,
+  TransferListQueryDto,
   UpdateTransferDto,
 } from "./transfer.dto.js";
 import { TransferService } from "./transfer.service.js";
@@ -31,7 +31,7 @@ export class TransferController {
 
   @Get()
   @RequirePermissions("transfer.read")
-  list(@CurrentUser() user: AuthUser, @Query() query: PaginationDto) {
+  list(@CurrentUser() user: AuthUser, @Query() query: TransferListQueryDto) {
     return this.service.list(user, query);
   }
 

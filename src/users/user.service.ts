@@ -14,7 +14,13 @@ import {
 } from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { ScopeType, UserKind } from "../generated/prisma/client.js";
-import type { AssignGrantDto, CreateUserDto } from "./user.dto.js";
+import type {
+  AssignGrantDto,
+  CreateUserDto,
+  GrantListQueryDto,
+  ResetPasswordDto,
+  UpdateUserDto,
+} from "./user.dto.js";
 @Injectable()
 export class UserService {
   constructor(
@@ -149,6 +155,94 @@ export class UserService {
       message: "Vô hiệu hóa tài khoản và thu hồi phiên thành công.",
     };
   }
+  async update(actor: AuthUser, id: string, d: UpdateUserDto) {
+    this.scope.assertAccess(actor, "user.update", {});
+    const target = await this.db.user.findFirst({
+      where: { id, organizationId: actor.organizationId },
+    });
+    if (!target) this.notFound();
+    const data = await this.db.user.update({
+      where: { id },
+      data: {
+        ...(d.display_name !== undefined
+          ? { displayName: d.display_name.trim() }
+          : {}),
+      },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        kind: true,
+        supplierId: true,
+        active: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
+    return { data, message: "Cập nhật tài khoản thành công." };
+  }
+  async activate(actor: AuthUser, id: string) {
+    this.scope.assertAccess(actor, "user.update", {});
+    const target = await this.db.user.findFirst({
+      where: { id, organizationId: actor.organizationId },
+    });
+    if (!target) this.notFound();
+    if (target.active) this.invalid("Tài khoản đang hoạt động.");
+    const data = await this.db.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: { active: true },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: actor.organizationId,
+          actorId: actor.id,
+          action: "user.activate",
+          resourceType: "User",
+          resourceId: id,
+          requestId: "user-activate",
+          beforeData: { active: false },
+          afterData: { active: true },
+        },
+      });
+      return { id: updated.id, active: updated.active };
+    });
+    return { data, message: "Kích hoạt lại tài khoản thành công." };
+  }
+  async resetPassword(actor: AuthUser, id: string, d: ResetPasswordDto) {
+    this.scope.assertAccess(actor, "user.reset_password", {});
+    const target = await this.db.user.findFirst({
+      where: { id, organizationId: actor.organizationId },
+    });
+    if (!target) this.notFound();
+    const passwordHash = await argon2.hash(d.password);
+    const data = await this.db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
+      });
+      const revoked = await tx.session.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: actor.organizationId,
+          actorId: actor.id,
+          action: "user.reset_password",
+          resourceType: "User",
+          resourceId: id,
+          requestId: "user-reset-password",
+          afterData: { sessions_revoked: revoked.count },
+        },
+      });
+      return { id, sessions_revoked: revoked.count };
+    });
+    return {
+      data,
+      message: "Đặt lại mật khẩu và thu hồi các phiên đăng nhập thành công.",
+    };
+  }
   async roles(actor: AuthUser, q: PaginationDto) {
     this.scope.assertAccess(actor, "role.read", {});
     const where = { organizationId: actor.organizationId, active: true };
@@ -198,11 +292,12 @@ export class UserService {
       meta: offsetMeta(q, total),
     };
   }
-  async grants(actor: AuthUser, q: PaginationDto) {
+  async grants(actor: AuthUser, q: GrantListQueryDto) {
     this.scope.assertAccess(actor, "grant.read", {});
     const where = {
       user: { organizationId: actor.organizationId },
       revokedAt: null,
+      ...(q.user_id ? { userId: q.user_id } : {}),
     };
     const { data, meta } = await paginateById(
       q,
@@ -210,7 +305,14 @@ export class UserService {
         this.db.roleGrant.findMany({
           where,
           include: {
-            user: { select: { id: true, username: true, kind: true } },
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                kind: true,
+              },
+            },
             role: true,
             facility: true,
             stockLocation: true,

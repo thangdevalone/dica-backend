@@ -12,7 +12,11 @@ import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
 import { PaginationDto } from "../common/dto/pagination.dto.js";
-import { CancelOrderDto, CloseOutstandingDto } from "./order.dto.js";
+import {
+  CancelOrderDto,
+  CloseOutstandingDto,
+  OrderListQueryDto,
+} from "./order.dto.js";
 import { OrderService } from "./order.service.js";
 @ApiTags("Đơn thực hiện")
 @ApiBearerAuth()
@@ -39,7 +43,7 @@ export class OrderController {
   }
   @Get("orders") @RequirePermissions("order.read") list(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: OrderListQueryDto,
   ) {
     return this.s.list(u, q);
   }

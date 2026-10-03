@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth.types.js";
 import { ScopeService } from "../auth/scope.service.js";
-import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
 import { IdempotencyService } from "../common/idempotency/idempotency.service.js";
@@ -22,7 +21,10 @@ import type {
   CreateMappingDto,
   CreateRecipeDto,
   CreateSalesImportDto,
+  IposListQueryDto,
   RecalculateVarianceDto,
+  RecipeListQueryDto,
+  VarianceListQueryDto,
 } from "./ipos.dto.js";
 
 @Injectable()
@@ -45,12 +47,40 @@ export class IposService {
     };
   }
 
-  async mappings(user: AuthUser, query: PaginationDto) {
-    const facilityIds = this.scope.facilityIds(user, "ipos_mapping.read");
-    const search = normalizedSearch(query);
-    const where = {
+  async salesImports(user: AuthUser, query: IposListQueryDto) {
+    const facilityIds = this.scope.facilityIds(user, "sales_import.read");
+    const where: Prisma.SalesImportBatchWhereInput = {
       organizationId: user.organizationId,
       ...(facilityIds ? { facilityId: { in: facilityIds } } : {}),
+      ...(query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {}),
+    };
+    const { data, meta } = await paginateById(
+      query,
+      ({ skip, take, cursorId }) =>
+        this.db.salesImportBatch.findMany({
+          where,
+          include: { facility: true, _count: { select: { records: true } } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          ...(skip !== undefined ? { skip } : {}),
+          take,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      () => this.db.salesImportBatch.count({ where }),
+    );
+    return {
+      data,
+      message: "Lấy danh sách lô import bán hàng thành công.",
+      meta,
+    };
+  }
+
+  async mappings(user: AuthUser, query: IposListQueryDto) {
+    const facilityIds = this.scope.facilityIds(user, "ipos_mapping.read");
+    const search = normalizedSearch(query);
+    const where: Prisma.MenuItemMappingWhereInput = {
+      organizationId: user.organizationId,
+      ...(facilityIds ? { facilityId: { in: facilityIds } } : {}),
+      ...(query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {}),
       ...(search
         ? {
             OR: [
@@ -75,7 +105,10 @@ export class IposService {
       ({ skip, take, cursorId }) =>
         this.db.menuItemMapping.findMany({
           where,
-          include: { facility: true },
+          include: {
+            facility: true,
+            _count: { select: { recipeVersions: true } },
+          },
           orderBy: [{ menuItemName: "asc" }, { id: "asc" }],
           ...(skip !== undefined ? { skip } : {}),
           take,
@@ -126,15 +159,17 @@ export class IposService {
     return { data, message: "Cập nhật mapping món iPOS thành công." };
   }
 
-  async recipes(user: AuthUser, query: PaginationDto) {
+  async recipes(user: AuthUser, query: RecipeListQueryDto) {
     const access = this.scope.constraintsFor(user, "recipe.read", [
       "facilityId",
       "stockLocationId",
     ]);
-    const where = {
+    const where: Prisma.RecipeVersionWhereInput = {
       mapping: {
         organizationId: user.organizationId,
+        ...(query.facility_id ? { facilityId: query.facility_id } : {}),
       },
+      ...(query.mapping_id ? { mappingId: query.mapping_id } : {}),
       ...(access
         ? {
             OR: access.map((item) => ({
@@ -154,9 +189,11 @@ export class IposService {
         this.db.recipeVersion.findMany({
           where,
           include: {
-            mapping: true,
-            stockLocation: true,
-            ingredients: { include: { ingredient: true } },
+            mapping: { include: { facility: true } },
+            stockLocation: { include: { facility: true } },
+            ingredients: {
+              include: { ingredient: { include: { baseUnit: true } } },
+            },
           },
           orderBy: [{ effectiveFrom: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),
@@ -474,13 +511,18 @@ export class IposService {
     };
   }
 
-  async variances(user: AuthUser, query: PaginationDto) {
+  async variances(user: AuthUser, query: VarianceListQueryDto) {
     const access = this.scope.constraintsFor(user, "variance.read", [
       "facilityId",
       "stockLocationId",
     ]);
     const where: Prisma.VarianceResultWhereInput = {
       organizationId: user.organizationId,
+      ...(query.stocktake_id ? { stocktakeId: query.stocktake_id } : {}),
+      ...(query.data_status ? { dataStatus: query.data_status } : {}),
+      ...(query.facility_id
+        ? { AND: [{ stockLocation: { facilityId: query.facility_id } }] }
+        : {}),
       ...(access
         ? {
             OR: access.map((item) => ({
@@ -497,7 +539,11 @@ export class IposService {
       ({ skip, take, cursorId }) =>
         this.db.varianceResult.findMany({
           where,
-          include: { stockLocation: true, ingredient: true, stocktake: true },
+          include: {
+            stockLocation: { include: { facility: true } },
+            ingredient: { include: { baseUnit: true } },
+            stocktake: true,
+          },
           orderBy: [{ calculatedAt: "desc" }, { id: "desc" }],
           ...(skip !== undefined ? { skip } : {}),
           take,
@@ -746,18 +792,22 @@ export class IposService {
     };
   }
 
-  async alertRules(user: AuthUser, query: PaginationDto) {
+  async alertRules(user: AuthUser, query: IposListQueryDto) {
     const facilityIds = this.scope.facilityIds(user, "alert_rule.manage");
-    const where = {
+    const where: Prisma.AlertRuleWhereInput = {
       organizationId: user.organizationId,
       ...(facilityIds ? { facilityId: { in: facilityIds } } : {}),
+      ...(query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {}),
     };
     const { data, meta } = await paginateById(
       query,
       ({ skip, take, cursorId }) =>
         this.db.alertRule.findMany({
           where,
-          include: { facility: true, ingredient: true },
+          include: {
+            facility: true,
+            ingredient: { include: { baseUnit: true } },
+          },
           orderBy: { id: "desc" },
           ...(skip !== undefined ? { skip } : {}),
           take,

@@ -6,7 +6,10 @@ import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
 import { IdempotencyService } from "../common/idempotency/idempotency.service.js";
-import { paginateById } from "../common/pagination/pagination.js";
+import {
+  normalizedSearch,
+  paginateById,
+} from "../common/pagination/pagination.js";
 import { assertPositiveDecimal } from "../common/utils/decimal.js";
 import { PrismaService } from "../database/prisma.service.js";
 import {
@@ -22,6 +25,7 @@ import type {
   CreateTransferDto,
   RejectTransferDto,
   TransferCommandDto,
+  TransferListQueryDto,
   UpdateTransferDto,
 } from "./transfer.dto.js";
 
@@ -33,14 +37,32 @@ export class TransferService {
     private readonly idempotency: IdempotencyService,
   ) {}
 
-  async list(user: AuthUser, query: PaginationDto) {
+  async list(user: AuthUser, query: TransferListQueryDto) {
     const access = this.scope.constraintsFor(user, "transfer.read", [
       "facilityId",
       "stockLocationId",
       "createdById",
     ]);
+    const search = normalizedSearch(query);
+    const filters: Prisma.TransferWhereInput[] = [];
+    if (query.facility_id)
+      filters.push({
+        OR: [
+          { fromStockLocation: { facilityId: query.facility_id } },
+          { toStockLocation: { facilityId: query.facility_id } },
+        ],
+      });
+    if (search)
+      filters.push({
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { note: { contains: search, mode: "insensitive" } },
+        ],
+      });
     const where: Prisma.TransferWhereInput = {
       organizationId: user.organizationId,
+      ...(query.status ? { status: query.status } : {}),
+      ...(filters.length ? { AND: filters } : {}),
       ...(access
         ? {
             OR: access.map((item) => {
@@ -75,6 +97,7 @@ export class TransferService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.transfer.count({ where }),
+      { searchHandled: true },
     );
     return {
       data,
@@ -89,7 +112,8 @@ export class TransferService {
       include: {
         fromStockLocation: { include: { facility: true } },
         toStockLocation: { include: { facility: true } },
-        lines: { include: { ingredient: true } },
+        createdBy: { select: { id: true, username: true, displayName: true } },
+        lines: { include: { ingredient: { include: { baseUnit: true } } } },
         approvals: { orderBy: { createdAt: "asc" } },
         orders: { include: { lines: true } },
       },

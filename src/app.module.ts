@@ -9,6 +9,7 @@ import { CatalogModule } from "./catalog/catalog.module.js";
 import { ConfigAuditInterceptor } from "./common/audit/config-audit.interceptor.js";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module.js";
 import { envSchema } from "./config/env.validation.js";
+import { DashboardModule } from "./dashboard/dashboard.module.js";
 import { DatabaseModule } from "./database/database.module.js";
 import { DeliveryModule } from "./delivery/delivery.module.js";
 import { HealthModule } from "./health/health.module.js";
@@ -103,6 +104,7 @@ import { UserModule } from "./users/user.module.js";
     ReportingModule,
     SystemModule,
     IposModule,
+    DashboardModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

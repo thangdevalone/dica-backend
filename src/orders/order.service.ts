@@ -5,10 +5,17 @@ import { ScopeService } from "../auth/scope.service.js";
 import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
-import { paginateById } from "../common/pagination/pagination.js";
+import {
+  normalizedSearch,
+  paginateById,
+} from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { OrderStatus, Prisma } from "../generated/prisma/client.js";
-import type { CancelOrderDto, CloseOutstandingDto } from "./order.dto.js";
+import type {
+  CancelOrderDto,
+  CloseOutstandingDto,
+  OrderListQueryDto,
+} from "./order.dto.js";
 @Injectable()
 export class OrderService {
   constructor(
@@ -16,13 +23,34 @@ export class OrderService {
     private scope: ScopeService,
     private config: ConfigService,
   ) {}
-  async list(u: AuthUser, q: PaginationDto) {
+  async list(u: AuthUser, q: OrderListQueryDto) {
     const access = this.scope.constraintsFor(u, "order.read", [
       "facilityId",
       "stockLocationId",
     ]);
+    const filters: Prisma.FulfillmentOrderWhereInput[] = [];
+    if (q.facility_id) {
+      filters.push({
+        OR: [
+          { destinationStockLocation: { facilityId: q.facility_id } },
+          { sourceStockLocation: { facilityId: q.facility_id } },
+        ],
+      });
+    }
+    const search = normalizedSearch(q);
+    if (search) {
+      filters.push({
+        OR: [
+          { code: { contains: search, mode: "insensitive" } },
+          { supplier: { name: { contains: search, mode: "insensitive" } } },
+        ],
+      });
+    }
     const where: Prisma.FulfillmentOrderWhereInput = {
       organizationId: u.organizationId,
+      ...(q.status ? { status: q.status } : {}),
+      ...(q.source_type ? { sourceType: q.source_type } : {}),
+      ...(filters.length ? { AND: filters } : {}),
       ...(access
         ? {
             OR: access.flatMap((item) => {
@@ -45,8 +73,8 @@ export class OrderService {
           where,
           include: {
             supplier: true,
-            sourceStockLocation: true,
-            destinationStockLocation: true,
+            sourceStockLocation: { include: { facility: true } },
+            destinationStockLocation: { include: { facility: true } },
             _count: {
               select: { lines: true, dispatches: true, receipts: true },
             },
@@ -57,6 +85,7 @@ export class OrderService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.fulfillmentOrder.count({ where }),
+      { searchHandled: true },
     );
     return {
       data,
@@ -69,9 +98,11 @@ export class OrderService {
       where: { id, organizationId: u.organizationId },
       include: {
         supplier: true,
-        sourceStockLocation: true,
+        sourceStockLocation: { include: { facility: true } },
         destinationStockLocation: { include: { facility: true } },
-        lines: { include: { ingredient: true } },
+        request: { select: { id: true, code: true, status: true } },
+        transfer: { select: { id: true, code: true, status: true } },
+        lines: { include: { ingredient: { include: { baseUnit: true } } } },
         dispatches: { include: { lines: true } },
         receipts: { include: { lines: true } },
       },

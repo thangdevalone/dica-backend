@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
@@ -9,6 +18,10 @@ import {
   CreateDepartmentDto,
   CreateFacilityDto,
   CreateStockLocationDto,
+  OrganizationListQueryDto,
+  UpdateDepartmentDto,
+  UpdateFacilityDto,
+  UpdateStockLocationDto,
 } from "./organization.dto.js";
 import { OrganizationService } from "./organization.service.js";
 @ApiTags("Tổ chức")
@@ -29,9 +42,16 @@ export class OrganizationController {
   ) {
     return this.s.createFacility(u, d);
   }
+  @Patch("facilities/:id") @RequirePermissions("facility.manage") updateF(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: UpdateFacilityDto,
+  ) {
+    return this.s.updateFacility(u, id, d);
+  }
   @Get("stock-locations") @RequirePermissions("stock_location.read") locations(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: OrganizationListQueryDto,
   ) {
     return this.s.locations(u, q);
   }
@@ -41,9 +61,18 @@ export class OrganizationController {
   ) {
     return this.s.createLocation(u, d);
   }
+  @Patch("stock-locations/:id")
+  @RequirePermissions("stock_location.manage")
+  updateL(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: UpdateStockLocationDto,
+  ) {
+    return this.s.updateLocation(u, id, d);
+  }
   @Get("departments") @RequirePermissions("department.read") departments(
     @CurrentUser() u: AuthUser,
-    @Query() q: PaginationDto,
+    @Query() q: OrganizationListQueryDto,
   ) {
     return this.s.departments(u, q);
   }
@@ -52,5 +81,12 @@ export class OrganizationController {
     @Body() d: CreateDepartmentDto,
   ) {
     return this.s.createDepartment(u, d);
+  }
+  @Patch("departments/:id") @RequirePermissions("department.manage") updateD(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: UpdateDepartmentDto,
+  ) {
+    return this.s.updateDepartment(u, id, d);
   }
 }

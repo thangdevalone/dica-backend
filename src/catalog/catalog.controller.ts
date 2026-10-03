@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
@@ -74,5 +83,58 @@ export class CatalogController {
   @RequirePermissions("supplier_ingredient.manage")
   link(@CurrentUser() u: AuthUser, @Body() d: D.LinkSupplierIngredientDto) {
     return this.s.link(u, d);
+  }
+  @Get("supplier-ingredients")
+  @RequirePermissions("supplier_ingredient.read")
+  supplierIngredients(
+    @CurrentUser() u: AuthUser,
+    @Query() q: D.SupplierIngredientQueryDto,
+  ) {
+    return this.s.supplierIngredients(u, q);
+  }
+  @Patch("supplier-ingredients/:id")
+  @RequirePermissions("supplier_ingredient.manage")
+  updateSupplierIngredient(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: D.UpdateSupplierIngredientDto,
+  ) {
+    return this.s.updateSupplierIngredient(u, id, d);
+  }
+  @Patch("units/:id")
+  @RequirePermissions("unit.manage")
+  updateUnit(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: D.UpdateUnitDto,
+  ) {
+    return this.s.updateUnit(u, id, d);
+  }
+  @Patch("ingredient-groups/:id")
+  @RequirePermissions("ingredient_group.manage")
+  updateGroup(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: D.UpdateIngredientGroupDto,
+  ) {
+    return this.s.updateGroup(u, id, d);
+  }
+  @Patch("ingredients/:id")
+  @RequirePermissions("ingredient.manage")
+  updateIngredient(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: D.UpdateIngredientDto,
+  ) {
+    return this.s.updateIngredient(u, id, d);
+  }
+  @Patch("suppliers/:id")
+  @RequirePermissions("supplier.manage")
+  updateSupplier(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: D.UpdateSupplierDto,
+  ) {
+    return this.s.updateSupplier(u, id, d);
   }
 }
