@@ -8,6 +8,11 @@ import { ErrorCode } from "../common/errors/error-codes.js";
 import { PrismaService } from "../database/prisma.service.js";
 import type { AuthUser, TokenPayload } from "./auth.types.js";
 import type { LoginDto } from "./dto/login.dto.js";
+import type {
+  ChangePasswordDto,
+  ChangeUsernameDto,
+  UpdateProfileDto,
+} from "./dto/profile.dto.js";
 
 const DUMMY_PASSWORD_HASH =
   "$argon2id$v=19$m=65536,p=4,t=3$0yTgMIF1XmKZRG1439tCHA$uAZ6AyYWEVdUFYyE/Z02+3W+j7P1EZLVryfhkZhTwLU";
@@ -75,7 +80,7 @@ export class AuthService {
           where: {
             organizationId_username: {
               organizationId: org.id,
-              username: dto.username,
+              username: dto.username.trim().toLowerCase(),
             },
           },
         })
@@ -189,18 +194,284 @@ export class AuthService {
     });
     return { data: null, message: "Đăng xuất thành công." };
   }
-  me(u: AuthUser) {
+  async me(u: AuthUser) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: u.id, organizationId: u.organizationId, active: true },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        kind: true,
+        organizationId: true,
+        supplierId: true,
+        identityNumber: true,
+        dateOfBirth: true,
+        phone: true,
+        email: true,
+        address: true,
+      },
+    });
+    if (!user) this.invalidSession();
     return {
       data: {
-        id: u.id,
-        username: u.username,
-        display_name: u.displayName,
-        kind: u.kind,
-        organization_id: u.organizationId,
-        supplier_id: u.supplierId,
+        id: user.id,
+        username: user.username,
+        display_name: user.displayName,
+        kind: user.kind,
+        organization_id: user.organizationId,
+        supplier_id: user.supplierId,
+        identity_number: user.identityNumber,
+        date_of_birth: user.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+        phone: user.phone,
+        email: user.email,
+        address: user.address,
       },
       message: "Lấy thông tin tài khoản thành công.",
     };
+  }
+  async updateProfile(u: AuthUser, d: UpdateProfileDto) {
+    const current = await this.prisma.user.findFirst({
+      where: { id: u.id, organizationId: u.organizationId, active: true },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        identityNumber: true,
+        dateOfBirth: true,
+        phone: true,
+        email: true,
+        address: true,
+      },
+    });
+    if (!current) this.invalidSession();
+    const identityNumber = this.optionalText(d.identity_number);
+    const dateOfBirth = this.optionalDate(d.date_of_birth);
+    if (
+      identityNumber &&
+      (await this.prisma.user.count({
+        where: {
+          organizationId: u.organizationId,
+          identityNumber,
+          id: { not: u.id },
+        },
+      }))
+    )
+      this.invalid("CCCD/CMND đã được sử dụng bởi tài khoản khác.");
+    const updatedFields = Object.entries({
+      display_name: d.display_name,
+      identity_number: d.identity_number,
+      date_of_birth: d.date_of_birth,
+      phone: d.phone,
+      email: d.email,
+      address: d.address,
+    })
+      .filter(([, value]) => value !== undefined)
+      .map(([field]) => field);
+    const data = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id: u.id },
+        data: {
+          ...(d.display_name !== undefined
+            ? { displayName: d.display_name.trim() || current.username }
+            : {}),
+          ...(d.identity_number !== undefined ? { identityNumber } : {}),
+          ...(d.date_of_birth !== undefined ? { dateOfBirth } : {}),
+          ...(d.phone !== undefined
+            ? { phone: this.optionalText(d.phone) }
+            : {}),
+          ...(d.email !== undefined
+            ? { email: this.optionalText(d.email)?.toLowerCase() ?? null }
+            : {}),
+          ...(d.address !== undefined
+            ? { address: this.optionalText(d.address) }
+            : {}),
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          kind: true,
+          organizationId: true,
+          supplierId: true,
+          identityNumber: true,
+          dateOfBirth: true,
+          phone: true,
+          email: true,
+          address: true,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: u.organizationId,
+          actorId: u.id,
+          action: "user.profile.update",
+          resourceType: "User",
+          resourceId: u.id,
+          requestId: u.requestId,
+          afterData: { updated_fields: updatedFields },
+        },
+      });
+      return updated;
+    });
+    return {
+      data: this.profile(data),
+      message: "Cập nhật thông tin cá nhân thành công.",
+    };
+  }
+  async changeUsername(u: AuthUser, d: ChangeUsernameDto) {
+    const current = await this.verifiedUser(u, d.current_password);
+    const username = d.username.trim().toLowerCase();
+    if (
+      await this.prisma.user.count({
+        where: {
+          organizationId: u.organizationId,
+          username,
+          id: { not: u.id },
+        },
+      })
+    )
+      this.invalid("Tên đăng nhập đã được sử dụng.");
+    const data = await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: u.id },
+        data: {
+          username,
+          ...(current.displayName === current.username
+            ? { displayName: username }
+            : {}),
+          tokenVersion: { increment: 1 },
+        },
+      });
+      const revoked = await tx.session.updateMany({
+        where: { userId: u.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: u.organizationId,
+          actorId: u.id,
+          action: "user.username.change",
+          resourceType: "User",
+          resourceId: u.id,
+          requestId: u.requestId,
+          beforeData: { username: current.username },
+          afterData: { username, sessions_revoked: revoked.count },
+        },
+      });
+      return { username, sessions_revoked: revoked.count };
+    });
+    return {
+      data,
+      message: "Đổi tên đăng nhập thành công. Vui lòng đăng nhập lại.",
+    };
+  }
+  async changePassword(u: AuthUser, d: ChangePasswordDto) {
+    const current = await this.verifiedUser(u, d.current_password);
+    if (await argon2.verify(current.passwordHash, d.new_password))
+      this.invalid("Mật khẩu mới phải khác mật khẩu hiện tại.");
+    const passwordHash = await argon2.hash(d.new_password);
+    const data = await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: u.id },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
+      });
+      const revoked = await tx.session.updateMany({
+        where: { userId: u.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.auditEvent.create({
+        data: {
+          organizationId: u.organizationId,
+          actorId: u.id,
+          action: "user.password.change",
+          resourceType: "User",
+          resourceId: u.id,
+          requestId: u.requestId,
+          afterData: { sessions_revoked: revoked.count },
+        },
+      });
+      return { sessions_revoked: revoked.count };
+    });
+    return {
+      data,
+      message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
+    };
+  }
+  private profile(user: {
+    id: string;
+    username: string;
+    displayName: string;
+    kind: string;
+    organizationId: string;
+    supplierId: string | null;
+    identityNumber: string | null;
+    dateOfBirth: Date | null;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  }) {
+    return {
+      id: user.id,
+      username: user.username,
+      display_name: user.displayName,
+      kind: user.kind,
+      organization_id: user.organizationId,
+      supplier_id: user.supplierId,
+      identity_number: user.identityNumber,
+      date_of_birth: user.dateOfBirth?.toISOString().slice(0, 10) ?? null,
+      phone: user.phone,
+      email: user.email,
+      address: user.address,
+    };
+  }
+  private optionalText(value: string | undefined): string | null {
+    return value?.trim() || null;
+  }
+  private optionalDate(value: string | undefined): Date | null {
+    if (!value?.trim()) return null;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      Number.isNaN(date.getTime()) ||
+      date.toISOString().slice(0, 10) !== value ||
+      date > new Date()
+    )
+      this.invalid("Ngày sinh không hợp lệ hoặc nằm trong tương lai.");
+    return date;
+  }
+  private async verifiedUser(u: AuthUser, password: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: u.id, organizationId: u.organizationId, active: true },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        passwordHash: true,
+      },
+    });
+    const valid = user
+      ? await argon2.verify(user.passwordHash, password).catch(() => false)
+      : false;
+    if (!user || !valid)
+      throw new ApiException(
+        ErrorCode.AUTH_INVALID_CREDENTIALS,
+        "Mật khẩu hiện tại không đúng.",
+        HttpStatus.UNAUTHORIZED,
+      );
+    return user;
+  }
+  private invalid(message: string): never {
+    throw new ApiException(
+      ErrorCode.VALIDATION_ERROR,
+      message,
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+  private invalidSession(): never {
+    throw new ApiException(
+      ErrorCode.AUTH_SESSION_INVALID,
+      "Phiên đăng nhập không còn hợp lệ.",
+      HttpStatus.UNAUTHORIZED,
+    );
   }
   permissions(u: AuthUser) {
     return {

@@ -83,6 +83,7 @@ export class UserService {
   }
   async create(actor: AuthUser, d: CreateUserDto) {
     this.scope.assertAccess(actor, "user.create", {});
+    this.scope.assertAccess(actor, "grant.assign", {});
     if (d.kind === UserKind.SUPPLIER && !d.supplier_id)
       this.invalid("Tài khoản nhà cung ứng bắt buộc có supplier_id.");
     if (d.kind === UserKind.INTERNAL && d.supplier_id)
@@ -98,24 +99,70 @@ export class UserService {
       }))
     )
       this.invalid("Nhà cung ứng không hợp lệ.");
-    const data = await this.db.user.create({
-      data: {
+    const role = await this.db.role.findFirst({
+      where: {
+        id: d.role_id,
         organizationId: actor.organizationId,
-        username: d.username.trim().toLowerCase(),
-        displayName: d.display_name.trim(),
-        passwordHash: await argon2.hash(d.password),
-        kind: d.kind,
-        ...(d.supplier_id ? { supplierId: d.supplier_id } : {}),
-      },
-      select: {
-        id: true,
-        username: true,
-        displayName: true,
-        kind: true,
-        supplierId: true,
         active: true,
-        createdAt: true,
       },
+    });
+    if (!role) this.notFound();
+    if (
+      d.kind === UserKind.SUPPLIER &&
+      (role.code !== "SUPPLIER" || d.scope_type !== ScopeType.SUPPLIER)
+    )
+      this.invalid(
+        "Tài khoản nhà cung ứng chỉ được nhận vai trò SUPPLIER với scope SUPPLIER.",
+      );
+    if (
+      d.kind === UserKind.INTERNAL &&
+      (role.code === "SUPPLIER" || d.scope_type === ScopeType.SUPPLIER)
+    )
+      this.invalid(
+        "Tài khoản nội bộ không được nhận vai trò/scope nhà cung ứng.",
+      );
+    await this.validateScope(actor, d);
+    const username = d.username.trim().toLowerCase();
+    if (
+      await this.db.user.count({
+        where: { organizationId: actor.organizationId, username },
+      })
+    )
+      this.invalid("Tên đăng nhập đã được sử dụng.");
+    const passwordHash = await argon2.hash(d.password);
+    const data = await this.db.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          organizationId: actor.organizationId,
+          username,
+          displayName: d.display_name?.trim() || username,
+          passwordHash,
+          kind: d.kind,
+          ...(d.supplier_id ? { supplierId: d.supplier_id } : {}),
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          kind: true,
+          supplierId: true,
+          active: true,
+          createdAt: true,
+        },
+      });
+      const grant = await tx.roleGrant.create({
+        data: {
+          userId: user.id,
+          roleId: d.role_id,
+          scopeType: d.scope_type,
+          ...(d.facility_id ? { facilityId: d.facility_id } : {}),
+          ...(d.stock_location_id
+            ? { stockLocationId: d.stock_location_id }
+            : {}),
+          ...(d.department_id ? { departmentId: d.department_id } : {}),
+        },
+      });
+      return { ...user, grants: [{ ...grant, role }] };
     });
     return { data, message: "Tạo tài khoản thành công." };
   }
@@ -441,12 +488,20 @@ export class UserService {
       message: "Thu hồi quyền và các phiên của tài khoản thành công.",
     };
   }
-  private async validateScope(a: AuthUser, d: AssignGrantDto) {
+  private async validateScope(
+    a: AuthUser,
+    d: Pick<
+      AssignGrantDto,
+      "scope_type" | "facility_id" | "stock_location_id" | "department_id"
+    >,
+  ) {
     if (
-      d.scope_type === ScopeType.ORGANIZATION &&
+      (d.scope_type === ScopeType.ORGANIZATION ||
+        d.scope_type === ScopeType.OWN) &&
       [d.facility_id, d.stock_location_id, d.department_id].some(Boolean)
     )
-      this.invalid("Scope ORGANIZATION không nhận ID cơ sở/kho/bộ phận.");
+      this.invalid("Scope ORGANIZATION/OWN không nhận ID cơ sở/kho/bộ phận.");
+    if (d.scope_type === ScopeType.OWN) return;
     if (d.scope_type === ScopeType.SUPPLIER) {
       if ([d.facility_id, d.stock_location_id, d.department_id].some(Boolean))
         this.invalid("Scope SUPPLIER không nhận ID cơ sở/kho/bộ phận.");

@@ -35,7 +35,7 @@ export class UserController {
   ) {
     return this.s.list(u, q);
   }
-  @Post("users") @RequirePermissions("user.create") create(
+  @Post("users") @RequirePermissions("user.create", "grant.assign") create(
     @CurrentUser() u: AuthUser,
     @Body() d: CreateUserDto,
   ) {
