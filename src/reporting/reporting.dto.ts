@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsInt, IsOptional, IsString, IsUUID, Matches, Min } from "class-validator";
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Matches,
+  Min,
+} from "class-validator";
 import { PaginationDto } from "../common/dto/pagination.dto.js";
 
 export class UpdatePaymentDto {

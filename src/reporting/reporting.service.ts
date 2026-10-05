@@ -346,8 +346,12 @@ export class ReportingService {
   }
 
   /** Lọc theo cơ sở do người dùng chọn (AND với phạm vi quyền). */
-  private facilityFilter(query: ReportQueryDto): Prisma.StockLocationWhereInput {
-    return query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {};
+  private facilityFilter(
+    query: ReportQueryDto,
+  ): Prisma.StockLocationWhereInput {
+    return query.facility_id
+      ? { AND: [{ facilityId: query.facility_id }] }
+      : {};
   }
 
   private stockLocationScope(

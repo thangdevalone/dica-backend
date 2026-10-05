@@ -52,7 +52,9 @@ export class IposService {
     const where: Prisma.SalesImportBatchWhereInput = {
       organizationId: user.organizationId,
       ...(facilityIds ? { facilityId: { in: facilityIds } } : {}),
-      ...(query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {}),
+      ...(query.facility_id
+        ? { AND: [{ facilityId: query.facility_id }] }
+        : {}),
     };
     const { data, meta } = await paginateById(
       query,
@@ -80,7 +82,9 @@ export class IposService {
     const where: Prisma.MenuItemMappingWhereInput = {
       organizationId: user.organizationId,
       ...(facilityIds ? { facilityId: { in: facilityIds } } : {}),
-      ...(query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {}),
+      ...(query.facility_id
+        ? { AND: [{ facilityId: query.facility_id }] }
+        : {}),
       ...(search
         ? {
             OR: [
@@ -797,7 +801,9 @@ export class IposService {
     const where: Prisma.AlertRuleWhereInput = {
       organizationId: user.organizationId,
       ...(facilityIds ? { facilityId: { in: facilityIds } } : {}),
-      ...(query.facility_id ? { AND: [{ facilityId: query.facility_id }] } : {}),
+      ...(query.facility_id
+        ? { AND: [{ facilityId: query.facility_id }] }
+        : {}),
     };
     const { data, meta } = await paginateById(
       query,

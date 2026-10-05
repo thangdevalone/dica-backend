@@ -57,10 +57,12 @@ API được publish tại `127.0.0.1:3000`; không mở port 3000 trong firewal
 ### Cấu hình Nginx kết hợp cả Web (Next.js :3001) và Backend (NestJS :3000)
 
 Cả `dica-web` và `dica-backend` cùng chạy trên VPS sau Nginx tại domain **`uat.lauechdica.vn`**:
+
 - `/api/` chuyển tiếp vào backend (`127.0.0.1:3000`).
 - Các đường dẫn còn lại chuyển tiếp vào web (`127.0.0.1:3001`).
 
 File cấu hình Nginx mẫu hoàn chỉnh: `dica-web/nginx/uat.lauechdica.vn.conf`. Cấp chứng chỉ SSL bằng Certbot:
+
 ```bash
 sudo certbot --nginx -d uat.lauechdica.vn
 ```

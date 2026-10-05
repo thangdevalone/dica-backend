@@ -51,10 +51,7 @@ export class UserController {
   }
   @Patch("users/:id/activate")
   @RequirePermissions("user.update")
-  activate(
-    @CurrentUser() u: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
-  ) {
+  activate(@CurrentUser() u: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.s.activate(u, id);
   }
   @Post("users/:id/reset-password")

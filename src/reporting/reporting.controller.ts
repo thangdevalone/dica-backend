@@ -67,10 +67,7 @@ export class ReportingController {
 
   @Get("reports/payment")
   @RequirePermissions("report.payment")
-  paymentReport(
-    @CurrentUser() user: AuthUser,
-    @Query() query: ReportQueryDto,
-  ) {
+  paymentReport(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.paymentReport(user, query);
   }
 }

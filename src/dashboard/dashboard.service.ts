@@ -323,7 +323,13 @@ export class DashboardService {
     let unpricedRows = 0;
     const groups = new Map<
       string,
-      { id: string | null; name: string; quantity: Prisma.Decimal; value: Prisma.Decimal; rows: number }
+      {
+        id: string | null;
+        name: string;
+        quantity: Prisma.Decimal;
+        value: Prisma.Decimal;
+        rows: number;
+      }
     >();
     const items = new Map<
       string,
@@ -617,7 +623,8 @@ export class DashboardService {
     const statusCounts = this.emptyCounts(Object.values(DocumentStatus));
     let total = 0;
     for (const row of byStatus) {
-      statusCounts[row.status] = (statusCounts[row.status] ?? 0) + row._count._all;
+      statusCounts[row.status] =
+        (statusCounts[row.status] ?? 0) + row._count._all;
       total += row._count._all;
       if (row.status === DocumentStatus.SUBMITTED)
         stats(row.facilityId).pending_requests += row._count._all;
@@ -736,7 +743,8 @@ export class DashboardService {
     );
     for (const row of openInbound) {
       const location = locationById.get(row.destinationStockLocationId);
-      if (location) stats(location.facilityId).open_inbound_orders += row._count._all;
+      if (location)
+        stats(location.facilityId).open_inbound_orders += row._count._all;
     }
     const approved = decimalOf(lines._sum.approvedQuantity);
     const received = decimalOf(lines._sum.receivedQuantity);

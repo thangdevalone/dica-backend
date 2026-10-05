@@ -69,14 +69,16 @@ export class UpdateIngredientGroupDto {
 export class UpdateIngredientDto {
   @IsOptional() @IsString() @Length(1, 200) name?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== null) @IsUUID() group_id?:
-    | string
-    | null;
+    string | null;
   @IsOptional() @IsBoolean() active?: boolean;
 }
 export class UpdateSupplierDto {
   @IsOptional() @IsString() @Length(1, 200) name?: string;
   @IsOptional() @IsString() @MaxLength(30) phone?: string;
-  @IsOptional() @ValidateIf((_o, v) => v !== "") @IsEmail() @MaxLength(200)
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== "")
+  @IsEmail()
+  @MaxLength(200)
   email?: string;
   @IsOptional() @IsBoolean() active?: boolean;
 }

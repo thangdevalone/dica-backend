@@ -63,7 +63,9 @@ export class DeliveryListQueryDto extends PaginationDto {
 export class DiscrepancyListQueryDto extends PaginationDto {
   @ApiPropertyOptional({ enum: ["OPEN", "RESOLVED"] })
   @IsOptional()
-  @IsIn(["OPEN", "RESOLVED"], { message: "Trạng thái chênh lệch không hợp lệ." })
+  @IsIn(["OPEN", "RESOLVED"], {
+    message: "Trạng thái chênh lệch không hợp lệ.",
+  })
   status?: "OPEN" | "RESOLVED";
 }
 
