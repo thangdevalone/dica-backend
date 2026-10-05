@@ -1,14 +1,7 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Headers,
-  Ip,
-  Patch,
-  Post,
-} from "@nestjs/common";
+import { Body, Controller, Get, Ip, Patch, Post, Req } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
+import type { Request } from "express";
 import type { AuthUser } from "./auth.types.js";
 import { AuthService } from "./auth.service.js";
 import { CurrentUser } from "./decorators/current-user.decorator.js";
@@ -26,14 +19,11 @@ export class AuthController {
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post("auth/login")
-  login(
-    @Body() d: LoginDto,
-    @Ip() ip: string,
-    @Headers("user-agent") ua?: string,
-  ) {
+  login(@Body() d: LoginDto, @Ip() ip: string, @Req() request: Request) {
+    const userAgent = request.get("user-agent");
     return this.auth.login(d, {
       ipAddress: ip,
-      ...(ua ? { userAgent: ua } : {}),
+      ...(userAgent ? { userAgent } : {}),
     });
   }
   @Public()
