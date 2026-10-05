@@ -116,12 +116,15 @@ jobs:
     environment: production
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Deploy over SSH
         env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_REF: ${{ needs.image.outputs.image_ref }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
@@ -158,11 +161,16 @@ jobs:
             "${target}:${VPS_DEPLOY_PATH}/docker-compose.yml.next"
 
           ssh "${ssh_args[@]}" "${target}" bash -s -- \
-            "${VPS_DEPLOY_PATH}" "${IMAGE_REF}" <<'REMOTE'
+            "${VPS_DEPLOY_PATH}" "${IMAGE_REF}" "${GITHUB_ACTOR}" "${GITHUB_TOKEN}" <<'REMOTE'
           set -Eeuo pipefail
           deploy_path="$1"
           image_ref="$2"
+          gh_actor="$3"
+          gh_token="$4"
           cd "${deploy_path}"
+
+          # Dang nhap GHCR bang token 1 lan tu dong cua GitHub Actions:
+          echo "${gh_token}" | docker login ghcr.io -u "${gh_actor}" --password-stdin
 
           test -f .env.production || {
             echo "Missing ${deploy_path}/.env.production"
