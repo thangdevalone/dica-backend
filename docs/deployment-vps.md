@@ -52,18 +52,58 @@ openssl rand -hex 48
 
 ## 3. Reverse proxy và TLS
 
-API được publish tại `127.0.0.1:3000`; không mở port 3000 trong firewall. Ví dụ Nginx tối thiểu:
+API được publish tại `127.0.0.1:3000`; không mở port 3000 trong firewall.
+
+### Cấu hình Nginx kết hợp cả Web (Next.js :3001) và Backend (NestJS :3000)
+
+Nếu chạy cả `dica-web` và `dica-backend` trên cùng VPS, khuyên dùng cấu hình **Unified Single Domain** (ví dụ `dica.example.com`), trong đó `/api/` chuyển tiếp vào backend và các path khác vào web. Xem chi tiết file cấu hình hoàn chỉnh tại repository `dica-web`: `nginx/conf.d/dica-unified.conf`.
+
+Tóm tắt Nginx cho cả hai service:
 
 ```nginx
+upstream dica_backend {
+    server 127.0.0.1:3000;
+    keepalive 32;
+}
+
+upstream dica_web {
+    server 127.0.0.1:3001;
+    keepalive 32;
+}
+
 server {
     listen 443 ssl http2;
-    server_name api.example.com;
+    server_name dica.example.com;
 
     client_max_body_size 10m;
 
-    location / {
-        proxy_pass http://127.0.0.1:3000;
+    # Backend API:
+    location /api/ {
+        proxy_pass http://dica_backend;
         proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 60s;
+    }
+
+    # Next.js Static Cache:
+    location /_next/static/ {
+        proxy_pass http://dica_web;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        expires 365d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # Frontend Web:
+    location / {
+        proxy_pass http://dica_web;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
