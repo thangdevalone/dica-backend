@@ -135,7 +135,7 @@ export class DeliveryService {
           action: "discrepancy.resolve",
           resourceType: "DiscrepancyCase",
           resourceId: id,
-          requestId: `discrepancy-resolve:${id}`,
+          requestId: u.requestId,
           beforeData: { status: discrepancy.status },
           afterData: {
             status: updated.status,
@@ -444,7 +444,7 @@ export class DeliveryService {
             action: "dispatch.post",
             resourceType: "Dispatch",
             resourceId: id,
-            requestId: key,
+            requestId: u.requestId,
             afterData: { status: "POSTED" },
           },
         });
@@ -719,7 +719,7 @@ export class DeliveryService {
             action: "receipt.post",
             resourceType: "Receipt",
             resourceId: id,
-            requestId: key,
+            requestId: u.requestId,
             afterData: { status: "POSTED" },
           },
         });

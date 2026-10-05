@@ -21,6 +21,7 @@ export interface AuthUser {
   username: string;
   displayName: string;
   sessionId: string;
+  requestId: string;
   grants: AuthGrant[];
 }
 export interface TokenPayload {

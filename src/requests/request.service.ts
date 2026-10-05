@@ -218,7 +218,7 @@ export class RequestService {
             action: "request.cancel",
             resourceType: "SupplyRequest",
             resourceId: id,
-            requestId: `request-cancel:${id}:${d.expected_version}`,
+            requestId: u.requestId,
             beforeData: { status: request.status, version: request.version },
             afterData: {
               status: updated.status,
@@ -293,7 +293,7 @@ export class RequestService {
             action: "request.refresh_routing",
             resourceType: "SupplyRequest",
             resourceId: id,
-            requestId: `request-routing:${id}:${d.expected_version}`,
+            requestId: u.requestId,
             beforeData: { status: request.status, version: request.version },
             afterData: { status: updated.status, version: updated.version },
           },
@@ -469,7 +469,7 @@ export class RequestService {
           const o = await tx.fulfillmentOrder.create({
             data: {
               organizationId: u.organizationId,
-              requestId: r.id,
+              requestId: u.requestId,
               code: this.code("ORD"),
               sourceType:
                 type === SourceType.STOCK
@@ -500,7 +500,7 @@ export class RequestService {
         }
         await tx.approvalEvent.create({
           data: {
-            requestId: r.id,
+            requestId: u.requestId,
             actorId: u.id,
             decision: ApprovalDecision.APPROVED,
             policy: "MANAGER_APPROVAL",
@@ -522,7 +522,7 @@ export class RequestService {
             action: "request.approve",
             resourceType: "SupplyRequest",
             resourceId: id,
-            requestId: key,
+            requestId: u.requestId,
             beforeData: { status: "SUBMITTED" },
             afterData: { status: "APPROVED", orders },
           },
@@ -581,7 +581,7 @@ export class RequestService {
         if (guard.count !== 1) this.version();
         await tx.approvalEvent.create({
           data: {
-            requestId: id,
+            requestId: u.requestId,
             actorId: u.id,
             decision: ApprovalDecision.REJECTED,
             policy: "MANAGER_APPROVAL",
@@ -682,7 +682,7 @@ export class RequestService {
                 : "request.update_draft",
             resourceType: "SupplyRequest",
             resourceId: id,
-            requestId: `request-edit:${id}:${d.expected_version}`,
+            requestId: u.requestId,
             beforeData: {
               status: request.status,
               version: request.version,

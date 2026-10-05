@@ -497,7 +497,7 @@ export class IposService {
             action: "sales_import.commit",
             resourceType: "SalesImportBatch",
             resourceId: id,
-            requestId: key,
+            requestId: user.requestId,
             afterData: { status: "COMMITTED" },
           },
         });
@@ -735,7 +735,7 @@ export class IposService {
           action: "variance.recalculate",
           resourceType: "Stocktake",
           resourceId: stocktake.id,
-          requestId: `variance:${stocktake.id}:v${version}`,
+          requestId: user.requestId,
           afterData: { version, result_count: results.length },
         },
       });

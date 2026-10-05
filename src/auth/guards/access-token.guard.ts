@@ -112,6 +112,7 @@ export class AccessTokenGuard implements CanActivate {
       username: user.username,
       displayName: user.displayName,
       sessionId: payload.sid,
+      requestId: req.requestId,
       grants: user.grants.map((g) => ({
         id: g.id,
         roleCode: g.role.code,

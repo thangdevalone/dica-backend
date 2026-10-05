@@ -11,6 +11,7 @@ const user: AuthUser = {
   username: "staff",
   displayName: "Staff",
   sessionId: "s1",
+  requestId: "request-1",
   grants: [
     {
       id: "g1",

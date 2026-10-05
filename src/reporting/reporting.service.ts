@@ -109,7 +109,7 @@ export class ReportingService {
             action: "payment_tracking.update",
             resourceType: "FulfillmentOrder",
             resourceId: orderId,
-            requestId: key,
+            requestId: user.requestId,
             ...(existing
               ? {
                   beforeData: {

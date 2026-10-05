@@ -178,7 +178,7 @@ export class OperationService {
           action: "adjustment.approve",
           resourceType: "InventoryAdjustment",
           resourceId: id,
-          requestId: `adjustment-approve:${id}:${dto.expected_version}`,
+          requestId: user.requestId,
           beforeData: {
             status: adjustment.status,
             version: adjustment.version,
@@ -328,7 +328,7 @@ export class OperationService {
             action: "adjustment.post",
             resourceType: "InventoryAdjustment",
             resourceId: id,
-            requestId: key,
+            requestId: user.requestId,
             beforeData: {
               status: adjustment.status,
               version: adjustment.version,
@@ -591,7 +591,7 @@ export class OperationService {
             action: "stocktake.submit",
             resourceType: "Stocktake",
             resourceId: id,
-            requestId: `stocktake-submit:${id}`,
+            requestId: user.requestId,
             afterData: { status: "SUBMITTED", version: updated.version },
           },
         });
@@ -652,7 +652,7 @@ export class OperationService {
             action: "stocktake.reopen",
             resourceType: "Stocktake",
             resourceId: id,
-            requestId: `stocktake-reopen:${id}:${dto.expected_version}`,
+            requestId: user.requestId,
             beforeData: {
               status: stocktake.status,
               version: stocktake.version,
@@ -917,7 +917,7 @@ export class OperationService {
           action: "damage.confirm",
           resourceType: "DamageReport",
           resourceId: id,
-          requestId: `damage-confirm:${id}`,
+          requestId: user.requestId,
           afterData: {
             status: "CONFIRMED",
             inventory_posted: false,

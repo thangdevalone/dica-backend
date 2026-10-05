@@ -121,10 +121,15 @@ export class InventoryService {
     };
   }
   async notifications(u: AuthUser, q: NotificationListQueryDto) {
-    const where = {
+    const baseWhere: Prisma.NotificationWhereInput = {
       organizationId: u.organizationId,
       userId: u.id,
       ...(q.status ? { status: q.status } : {}),
+    };
+    const authorizedIds = await this.authorizedNotificationIds(u, baseWhere);
+    const where: Prisma.NotificationWhereInput = {
+      ...baseWhere,
+      id: { in: authorizedIds },
     };
     const { data, meta } = await paginateById(
       q,
@@ -143,6 +148,159 @@ export class InventoryService {
       message: "Lấy thông báo của bạn thành công.",
       meta,
     };
+  }
+
+  /**
+   * Notification lưu resource đa hình nên không thể JOIN trực tiếp bằng Prisma.
+   * Gom resource theo loại, authorize bằng scope hiện tại, rồi mới đưa danh sách ID
+   * hợp lệ vào query phân trang để không lộ preview/count sau khi bị thu hồi quyền.
+   */
+  private async authorizedNotificationIds(
+    u: AuthUser,
+    where: Prisma.NotificationWhereInput,
+  ): Promise<string[]> {
+    const notifications = await this.db.notification.findMany({
+      where,
+      select: { id: true, resourceType: true, resourceId: true },
+    });
+    if (notifications.length === 0) return [];
+
+    const idsFor = (type: string) => [
+      ...new Set(
+        notifications
+          .filter((notification) => notification.resourceType === type)
+          .map((notification) => notification.resourceId),
+      ),
+    ];
+    const requestIds = idsFor("SupplyRequest");
+    const orderIds = idsFor("FulfillmentOrder");
+    const transferIds = idsFor("Transfer");
+    const damageIds = idsFor("DamageReport");
+
+    const [requests, orders, transfers, damages] = await Promise.all([
+      requestIds.length
+        ? this.db.supplyRequest.findMany({
+            where: {
+              id: { in: requestIds },
+              organizationId: u.organizationId,
+            },
+            select: {
+              id: true,
+              facilityId: true,
+              departmentId: true,
+              createdById: true,
+            },
+          })
+        : [],
+      orderIds.length
+        ? this.db.fulfillmentOrder.findMany({
+            where: { id: { in: orderIds }, organizationId: u.organizationId },
+            select: {
+              id: true,
+              supplierId: true,
+              destinationStockLocationId: true,
+              destinationStockLocation: { select: { facilityId: true } },
+              sourceStockLocationId: true,
+              sourceStockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+      transferIds.length
+        ? this.db.transfer.findMany({
+            where: {
+              id: { in: transferIds },
+              organizationId: u.organizationId,
+            },
+            select: {
+              id: true,
+              fromStockLocationId: true,
+              fromStockLocation: { select: { facilityId: true } },
+              toStockLocationId: true,
+              toStockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+      damageIds.length
+        ? this.db.damageReport.findMany({
+            where: {
+              id: { in: damageIds },
+              stockLocation: {
+                facility: { organizationId: u.organizationId },
+              },
+            },
+            select: {
+              id: true,
+              stockLocationId: true,
+              createdById: true,
+              stockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+    ]);
+
+    const allowed = new Set<string>();
+    for (const resource of requests) {
+      if (
+        this.scope.canAccess(u, "request.read", {
+          facilityId: resource.facilityId,
+          departmentId: resource.departmentId,
+          createdById: resource.createdById,
+        })
+      )
+        allowed.add(`SupplyRequest:${resource.id}`);
+    }
+    for (const resource of orders) {
+      const canRead =
+        u.kind === "SUPPLIER"
+          ? Boolean(
+              u.supplierId &&
+              resource.supplierId === u.supplierId &&
+              this.scope.canAccess(u, "supplier_order.read_own", {
+                supplierId: resource.supplierId,
+              }),
+            )
+          : this.scope.canAccess(u, "order.read", {
+              facilityId: resource.destinationStockLocation.facilityId,
+              stockLocationId: resource.destinationStockLocationId,
+            }) ||
+            Boolean(
+              resource.sourceStockLocation &&
+              this.scope.canAccess(u, "order.read", {
+                facilityId: resource.sourceStockLocation.facilityId,
+                stockLocationId: resource.sourceStockLocationId,
+              }),
+            );
+      if (canRead) allowed.add(`FulfillmentOrder:${resource.id}`);
+    }
+    for (const resource of transfers) {
+      if (
+        this.scope.canAccess(u, "transfer.read", {
+          facilityId: resource.fromStockLocation.facilityId,
+          stockLocationId: resource.fromStockLocationId,
+        }) ||
+        this.scope.canAccess(u, "transfer.read", {
+          facilityId: resource.toStockLocation.facilityId,
+          stockLocationId: resource.toStockLocationId,
+        })
+      )
+        allowed.add(`Transfer:${resource.id}`);
+    }
+    for (const resource of damages) {
+      if (
+        this.scope.canAccess(u, "damage.read", {
+          facilityId: resource.stockLocation.facilityId,
+          stockLocationId: resource.stockLocationId,
+          createdById: resource.createdById,
+        })
+      )
+        allowed.add(`DamageReport:${resource.id}`);
+    }
+
+    return notifications
+      .filter((notification) =>
+        allowed.has(`${notification.resourceType}:${notification.resourceId}`),
+      )
+      .map((notification) => notification.id);
   }
 
   async notification(u: AuthUser, id: string) {

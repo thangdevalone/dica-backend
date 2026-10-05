@@ -313,7 +313,7 @@ export class OrderService {
             action: "order.close_outstanding",
             resourceType: "FulfillmentOrder",
             resourceId: id,
-            requestId: `order-close:${id}:${d.expected_version}`,
+            requestId: u.requestId,
             beforeData: { status: order.status, version: order.version },
             afterData: {
               status: updated.status,
@@ -414,7 +414,7 @@ export class OrderService {
             action: "order.cancel",
             resourceType: "FulfillmentOrder",
             resourceId: id,
-            requestId: `order-cancel:${id}:${d.expected_version}`,
+            requestId: u.requestId,
             beforeData: { status: order.status, version: order.version },
             afterData: {
               status: updated.status,

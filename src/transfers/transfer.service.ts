@@ -267,7 +267,7 @@ export class TransferService {
             action: "transfer.update_draft",
             resourceType: "Transfer",
             resourceId: id,
-            requestId: `transfer-update:${id}:${dto.expected_version}`,
+            requestId: user.requestId,
             beforeData: {
               version: transfer.version,
               from_stock_location_id: transfer.fromStockLocationId,
@@ -325,7 +325,7 @@ export class TransferService {
             action: "transfer.cancel",
             resourceType: "Transfer",
             resourceId: id,
-            requestId: `transfer-cancel:${id}:${dto.expected_version}`,
+            requestId: user.requestId,
             beforeData: { status: transfer.status, version: transfer.version },
             afterData: {
               status: updated.status,
@@ -395,7 +395,7 @@ export class TransferService {
             action: "transfer.auto_approve",
             resourceType: "Transfer",
             resourceId: id,
-            requestId: `transfer-submit:${id}`,
+            requestId: user.requestId,
             afterData: { status: "APPROVED", order_id: order.id },
           },
         });
@@ -475,7 +475,7 @@ export class TransferService {
             action: "transfer.approve",
             resourceType: "Transfer",
             resourceId: id,
-            requestId: key,
+            requestId: user.requestId,
             afterData: { status: "APPROVED", order_id: order.id },
           },
         });
