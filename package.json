@@ -19,6 +19,7 @@
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
+    "db:bootstrap": "node dist/scripts/bootstrap.js",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio"
   },

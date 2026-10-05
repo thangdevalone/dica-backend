@@ -2,7 +2,7 @@
 
 ## Deploy
 
-Build image bằng `docker build -t dica-backend:1.0.0 .`. Chạy migration bằng một job riêng `npm run db:migrate` trước khi tăng replica API. Không chạy seed demo ở production.
+Build image bằng `docker build -t dica-backend:1.0.0 .`. Chạy migration bằng một job riêng trước khi tăng replica API. Docker Compose tự chạy `db:migrate` rồi `db:bootstrap`; bootstrap production có version, chỉ tạo admin khi chưa tồn tại và không bao giờ đặt lại mật khẩu của tài khoản đã có. `db:seed` chỉ dành cho dữ liệu demo/local.
 
 Ở production, Swagger mặc định tắt; chỉ đặt `SWAGGER_ENABLED=true` khi tài liệu API được bảo vệ ở tầng gateway. Giữ `DEMO_POLICY_ENABLED=false` cho tới khi các policy nghiệp vụ demo đã được phê duyệt.
 

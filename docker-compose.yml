@@ -59,7 +59,14 @@ services:
 
   migrate:
     <<: *app-service
-    command: ["npm", "run", "db:migrate"]
+    command: ["sh", "-c", "npm run db:migrate && npm run db:bootstrap"]
+    environment:
+      <<: *app-environment
+      BOOTSTRAP_ORGANIZATION_CODE: ${BOOTSTRAP_ORGANIZATION_CODE:-DICA}
+      BOOTSTRAP_ORGANIZATION_NAME: ${BOOTSTRAP_ORGANIZATION_NAME:-DICA}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:-Quản trị DICA}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
     restart: "no"
     read_only: true
     tmpfs:

@@ -3,7 +3,7 @@
 Thiết kế production gồm ba service:
 
 - `postgres`: PostgreSQL nội bộ, không publish cổng `5432`.
-- `migrate`: chạy `prisma migrate deploy` một lần và phải thành công.
+- `migrate`: chạy `prisma migrate deploy`, sau đó bootstrap production theo version; cả hai bước phải thành công.
 - `api`: chỉ khởi động sau khi database healthy và migration hoàn tất; cổng API chỉ bind vào `127.0.0.1` của VPS để reverse proxy truy cập.
 
 GitHub Actions kiểm tra source, build image, push lên GHCR và deploy đúng image digest lên VPS. Secret không được build vào image hoặc commit vào repository.
@@ -46,6 +46,7 @@ openssl rand -hex 48
 
 - Chuỗi hex đầu tiên dùng đồng thời cho `POSTGRES_PASSWORD` và phần password trong `DATABASE_URL`.
 - Hai chuỗi tiếp theo lần lượt dùng cho `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET`; hai secret phải khác nhau.
+- `BOOTSTRAP_ADMIN_PASSWORD` là mật khẩu admin ban đầu, tối thiểu 12 ký tự. Bootstrap chỉ dùng nó khi tài khoản admin chưa tồn tại và không ghi đè mật khẩu ở các lần deploy sau; có thể xóa biến này khỏi file sau lần deploy đầu tiên.
 - `CORS_ORIGINS` có thể đặt là `*` để chấp nhận mọi nguồn gọi tới API, hoặc điền cụ thể các domain (phân tách bởi dấu phẩy).
 - Không bật `DEMO_POLICY_ENABLED` hoặc Swagger ở production nếu không có nhu cầu rõ ràng.
 - Compose đặt `TRUST_PROXY_HOPS=1` vì API chỉ nhận traffic qua một reverse proxy trên VPS. Nếu kiến trúc có CDN/proxy bổ sung, chỉ tăng giá trị sau khi xác định chính xác chuỗi proxy.
@@ -99,7 +100,7 @@ Workflow chỉ chấp nhận deploy path nằm dưới `/opt` hoặc `/srv`. Pus
 2. Build image `linux/amd64`, tạo SBOM/provenance và push lên GHCR.
 3. Pin deploy bằng `image@sha256:digest`, không dùng tag mutable.
 4. Upload Compose qua SSH, validate cấu hình, pull image.
-5. Chờ PostgreSQL healthy, chạy migration và chỉ sau đó khởi động API.
+5. Chờ PostgreSQL healthy, chạy migration, tự bootstrap organization/role/permission/admin theo version và chỉ sau đó khởi động API.
 6. Chờ healthcheck API trước khi job thành công.
 
 ## 5. Deploy thủ công lần đầu

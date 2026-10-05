@@ -197,6 +197,15 @@ model Organization {
   @@map("organizations")
 }
 
+model BootstrapState {
+  key         String   @id @db.VarChar(100)
+  version     Int
+  adminUserId String?  @map("admin_user_id") @db.Uuid
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("bootstrap_states")
+}
+
 model Facility {
   id             String             @id @default(uuid()) @db.Uuid
   organizationId String             @map("organization_id") @db.Uuid

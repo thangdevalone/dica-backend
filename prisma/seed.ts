@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import * as argon2 from "argon2";
 import {
+  SYSTEM_PERMISSIONS,
+  SYSTEM_ROLE_PERMISSIONS,
+} from "../src/auth/access-control.catalog.js";
+import {
   DepartmentType,
   FacilityType,
   LedgerEntryType,
@@ -254,14 +258,14 @@ async function main() {
     update: {},
     create: { code: "DICA", name: "DICA Demo" },
   });
-  for (const code of permissions)
+  for (const code of SYSTEM_PERMISSIONS)
     await db.permission.upsert({
       where: { code },
       update: {},
       create: { code, description: code },
     });
   const roles: Record<string, string> = {};
-  for (const [code, list] of Object.entries(rolePermissions)) {
+  for (const [code, list] of Object.entries(SYSTEM_ROLE_PERMISSIONS)) {
     const role = await db.role.upsert({
       where: { organizationId_code: { organizationId: org.id, code } },
       update: { active: true },
