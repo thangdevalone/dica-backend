@@ -46,7 +46,7 @@ openssl rand -hex 48
 
 - Chuỗi hex đầu tiên dùng đồng thời cho `POSTGRES_PASSWORD` và phần password trong `DATABASE_URL`.
 - Hai chuỗi tiếp theo lần lượt dùng cho `JWT_ACCESS_SECRET` và `JWT_REFRESH_SECRET`; hai secret phải khác nhau.
-- `CORS_ORIGINS` phải là domain HTTPS thật của frontend.
+- `CORS_ORIGINS` có thể đặt là `*` để chấp nhận mọi nguồn gọi tới API, hoặc điền cụ thể các domain (phân tách bởi dấu phẩy).
 - Không bật `DEMO_POLICY_ENABLED` hoặc Swagger ở production nếu không có nhu cầu rõ ràng.
 - Compose đặt `TRUST_PROXY_HOPS=1` vì API chỉ nhận traffic qua một reverse proxy trên VPS. Nếu kiến trúc có CDN/proxy bổ sung, chỉ tăng giá trị sau khi xác định chính xác chuỗi proxy.
 
@@ -56,64 +56,14 @@ API được publish tại `127.0.0.1:3000`; không mở port 3000 trong firewal
 
 ### Cấu hình Nginx kết hợp cả Web (Next.js :3001) và Backend (NestJS :3000)
 
-Nếu chạy cả `dica-web` và `dica-backend` trên cùng VPS, khuyên dùng cấu hình **Unified Single Domain** (ví dụ `dica.example.com`), trong đó `/api/` chuyển tiếp vào backend và các path khác vào web. Xem chi tiết file cấu hình hoàn chỉnh tại repository `dica-web`: `nginx/conf.d/dica-unified.conf`.
+Cả `dica-web` và `dica-backend` cùng chạy trên VPS sau Nginx tại domain **`uat.lauechdica.vn`**:
+- `/api/` chuyển tiếp vào backend (`127.0.0.1:3000`).
+- Các đường dẫn còn lại chuyển tiếp vào web (`127.0.0.1:3001`).
 
-Tóm tắt Nginx cho cả hai service:
-
-```nginx
-upstream dica_backend {
-    server 127.0.0.1:3000;
-    keepalive 32;
-}
-
-upstream dica_web {
-    server 127.0.0.1:3001;
-    keepalive 32;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name dica.example.com;
-
-    client_max_body_size 10m;
-
-    # Backend API:
-    location /api/ {
-        proxy_pass http://dica_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Connection "";
-        proxy_read_timeout 60s;
-    }
-
-    # Next.js Static Cache:
-    location /_next/static/ {
-        proxy_pass http://dica_web;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-        expires 365d;
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
-
-    # Frontend Web:
-    location / {
-        proxy_pass http://dica_web;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_read_timeout 60s;
-    }
-}
+File cấu hình Nginx mẫu hoàn chỉnh: `dica-web/nginx/uat.lauechdica.vn.conf`. Cấp chứng chỉ SSL bằng Certbot:
+```bash
+sudo certbot --nginx -d uat.lauechdica.vn
 ```
-
-Cấu hình chứng chỉ TLS bằng Certbot, Caddy hoặc cơ chế quản lý certificate hiện có. Chỉ public `80/443` và SSH; PostgreSQL không cần public.
 
 ## 4. GitHub Environment và secrets
 
