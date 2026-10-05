@@ -169,6 +169,25 @@ jobs:
           gh_token="$4"
           cd "${deploy_path}"
 
+          compose() {
+            docker compose --env-file .env.production "$@"
+          }
+
+          show_deploy_diagnostics() {
+            status=$?
+            trap - EXIT
+            if ((status != 0)); then
+              echo "::group::Docker Compose status"
+              compose ps --all || true
+              echo "::endgroup::"
+              echo "::group::Migration and service logs"
+              compose logs --no-color --tail=200 migrate api postgres || true
+              echo "::endgroup::"
+            fi
+            exit "${status}"
+          }
+          trap show_deploy_diagnostics EXIT
+
           # Dang nhap GHCR bang token 1 lan tu dong cua GitHub Actions:
           echo "${gh_token}" | docker login ghcr.io -u "${gh_actor}" --password-stdin
 
@@ -184,16 +203,16 @@ jobs:
           mv docker-compose.yml.next docker-compose.yml
 
           export APP_IMAGE="${image_ref}"
-          if ! docker compose --env-file .env.production config --quiet; then
+          if ! compose config --quiet; then
             test ! -f docker-compose.yml.previous ||
               mv docker-compose.yml.previous docker-compose.yml
             exit 1
           fi
 
-          docker compose --env-file .env.production pull api migrate
-          docker compose --env-file .env.production up \
+          compose pull api migrate
+          compose up \
             --detach --remove-orphans --wait --wait-timeout 180 postgres migrate api
-          docker compose --env-file .env.production ps
+          compose ps
           if test -f .deployed-image; then
             cp .deployed-image .previous-image
           fi
