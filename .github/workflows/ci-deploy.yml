@@ -184,7 +184,7 @@ jobs:
 
           docker compose --env-file .env.production pull api migrate
           docker compose --env-file .env.production up \
-            --detach --remove-orphans --wait --wait-timeout 180
+            --detach --remove-orphans --wait --wait-timeout 180 postgres migrate api
           docker compose --env-file .env.production ps
           if test -f .deployed-image; then
             cp .deployed-image .previous-image
