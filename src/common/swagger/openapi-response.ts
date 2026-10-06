@@ -27,6 +27,51 @@ const entity = (
   additionalProperties: true,
 });
 
+const ALL_ERROR_CODES = [
+  "AUTH_INVALID_CREDENTIALS",
+  "AUTH_SESSION_INVALID",
+  "FORBIDDEN",
+  "RESOURCE_NOT_FOUND",
+  "VALIDATION_ERROR",
+  "INVALID_STATE",
+  "VERSION_CONFLICT",
+  "IDEMPOTENCY_CONFLICT",
+  "IDEMPOTENCY_KEY_REQUIRED",
+  "SOURCE_NOT_CONFIGURED",
+  "SOURCE_UNAVAILABLE",
+  "QUANTITY_EXCEEDS_REMAINING",
+  "INSUFFICIENT_STOCK",
+  "DATA_INCOMPLETE",
+  "POLICY_NOT_CONFIGURED",
+  "RATE_LIMITED",
+  "INTERNAL_ERROR",
+] as const;
+
+function errorResponseSchema(codes: readonly string[]): Schema {
+  return entity(["success", "code", "message", "request_id", "timestamp"], {
+    success: { type: "boolean", enum: [false] },
+    code: { type: "string", enum: [...codes] },
+    message: { type: "string" },
+    details: {
+      nullable: true,
+      oneOf: [
+        {
+          type: "array",
+          items: {
+            oneOf: [
+              { type: "string" },
+              { type: "object", additionalProperties: true },
+            ],
+          },
+        },
+        { type: "object", additionalProperties: true },
+      ],
+    },
+    request_id: uuid,
+    timestamp: dateTime,
+  });
+}
+
 const documentStatus = {
   type: "string",
   enum: ["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "CANCELLED"],
@@ -67,37 +112,32 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       }),
     ],
   },
-  ApiErrorResponse: entity(
-    ["success", "code", "message", "request_id", "timestamp"],
-    {
-      success: { type: "boolean", enum: [false] },
-      code: {
-        type: "string",
-        enum: [
-          "AUTH_INVALID_CREDENTIALS",
-          "AUTH_SESSION_INVALID",
-          "FORBIDDEN",
-          "RESOURCE_NOT_FOUND",
-          "VALIDATION_ERROR",
-          "INVALID_STATE",
-          "VERSION_CONFLICT",
-          "IDEMPOTENCY_CONFLICT",
-          "IDEMPOTENCY_KEY_REQUIRED",
-          "SOURCE_NOT_CONFIGURED",
-          "SOURCE_UNAVAILABLE",
-          "QUANTITY_EXCEEDS_REMAINING",
-          "INSUFFICIENT_STOCK",
-          "DATA_INCOMPLETE",
-          "POLICY_NOT_CONFIGURED",
-          "INTERNAL_ERROR",
-        ],
-      },
-      message: { type: "string" },
-      details: { nullable: true },
-      request_id: uuid,
-      timestamp: dateTime,
-    },
-  ),
+  ApiErrorResponse: errorResponseSchema(ALL_ERROR_CODES),
+  BadRequestErrorResponse: errorResponseSchema([
+    "VALIDATION_ERROR",
+    "IDEMPOTENCY_KEY_REQUIRED",
+  ]),
+  UnauthorizedErrorResponse: errorResponseSchema([
+    "AUTH_INVALID_CREDENTIALS",
+    "AUTH_SESSION_INVALID",
+  ]),
+  ForbiddenErrorResponse: errorResponseSchema(["FORBIDDEN"]),
+  NotFoundErrorResponse: errorResponseSchema(["RESOURCE_NOT_FOUND"]),
+  ConflictErrorResponse: errorResponseSchema([
+    "VERSION_CONFLICT",
+    "IDEMPOTENCY_CONFLICT",
+  ]),
+  UnprocessableEntityErrorResponse: errorResponseSchema([
+    "INVALID_STATE",
+    "SOURCE_NOT_CONFIGURED",
+    "SOURCE_UNAVAILABLE",
+    "QUANTITY_EXCEEDS_REMAINING",
+    "INSUFFICIENT_STOCK",
+    "DATA_INCOMPLETE",
+    "POLICY_NOT_CONFIGURED",
+  ]),
+  TooManyRequestsErrorResponse: errorResponseSchema(["RATE_LIMITED"]),
+  InternalServerErrorResponse: errorResponseSchema(["INTERNAL_ERROR"]),
   GenericObject: { type: "object", additionalProperties: true },
   AuthSession: entity(["access_token", "refresh_token", "expires_in"], {
     access_token: { type: "string" },
@@ -695,6 +735,37 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       createdAt: dateTime,
     },
   ),
+  PushDevice: entity(["id", "platform", "lastSeenAt"], {
+    id: uuid,
+    platform: { type: "string", enum: ["ANDROID", "IOS"] },
+    deviceId: nullable({ type: "string" }),
+    appVersion: nullable({ type: "string" }),
+    lastSeenAt: dateTime,
+    createdAt: dateTime,
+  }),
+  UpdatedCount: entity(["updated"], {
+    updated: { type: "integer", minimum: 0 },
+  }),
+  Attachment: entity(
+    [
+      "id",
+      "resourceType",
+      "resourceId",
+      "fileName",
+      "mimeType",
+      "sizeBytes",
+      "createdAt",
+    ],
+    {
+      id: uuid,
+      resourceType: { type: "string", enum: ["RECEIPT", "DAMAGE_REPORT"] },
+      resourceId: uuid,
+      fileName: { type: "string" },
+      mimeType: { type: "string" },
+      sizeBytes: { type: "integer", minimum: 1 },
+      createdAt: dateTime,
+    },
+  ),
   StocktakeLine: entity(
     ["id", "ingredientId", "countedQuantity", "countedAt"],
     {
@@ -770,7 +841,33 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
     },
   ),
   PaymentTracking: entity(
-    ["orderId", "reconciledValue", "paidValue", "status", "version"],
+    [
+      "orderId",
+      "orderCode",
+      "reconciledValue",
+      "paidValue",
+      "status",
+      "version",
+    ],
+    {
+      orderId: uuid,
+      orderCode: { type: "string" },
+      reconciledValue: decimal,
+      paidValue: decimal,
+      status: { type: "string", enum: ["UNPAID", "PARTIAL", "PAID"] },
+      version: { type: "integer", minimum: 0 },
+    },
+  ),
+  PaymentTrackingReport: entity(
+    [
+      "id",
+      "orderId",
+      "reconciledValue",
+      "paidValue",
+      "status",
+      "version",
+      "updatedAt",
+    ],
     {
       id: uuid,
       orderId: uuid,
@@ -779,6 +876,174 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       status: { type: "string", enum: ["UNPAID", "PARTIAL", "PAID"] },
       version: { type: "integer", minimum: 1 },
       updatedAt: dateTime,
+      order: ref("FulfillmentOrder"),
+    },
+  ),
+  InventoryAdjustment: entity(
+    [
+      "id",
+      "stockLocationId",
+      "ingredientId",
+      "quantity",
+      "reason",
+      "status",
+      "version",
+      "createdAt",
+    ],
+    {
+      id: uuid,
+      stockLocationId: uuid,
+      ingredientId: uuid,
+      quantity: decimal,
+      reason: { type: "string" },
+      sourceType: nullable({ type: "string" }),
+      sourceId: nullable(uuid),
+      status: {
+        type: "string",
+        enum: ["DRAFT", "APPROVED", "POSTED", "REJECTED", "CANCELLED"],
+      },
+      version: { type: "integer", minimum: 1 },
+      createdById: uuid,
+      approvedAt: nullable(dateTime),
+      postedAt: nullable(dateTime),
+      createdAt: dateTime,
+      stockLocation: ref("StockLocation"),
+      ingredient: ref("Ingredient"),
+    },
+  ),
+  MenuItemMapping: entity(
+    ["id", "facilityId", "source", "externalItemKey", "menuItemName", "active"],
+    {
+      id: uuid,
+      facilityId: uuid,
+      source: { type: "string" },
+      externalItemKey: { type: "string" },
+      menuItemName: { type: "string" },
+      active: { type: "boolean" },
+      facility: ref("Facility"),
+    },
+  ),
+  RecipeIngredient: entity(["id", "ingredientId", "baseQuantity"], {
+    id: uuid,
+    ingredientId: uuid,
+    baseQuantity: decimal,
+    ingredient: ref("Ingredient"),
+  }),
+  RecipeVersion: entity(
+    [
+      "id",
+      "mappingId",
+      "stockLocationId",
+      "version",
+      "effectiveFrom",
+      "createdAt",
+    ],
+    {
+      id: uuid,
+      mappingId: uuid,
+      stockLocationId: uuid,
+      version: { type: "integer", minimum: 1 },
+      effectiveFrom: dateTime,
+      effectiveTo: nullable(dateTime),
+      createdAt: dateTime,
+      mapping: ref("MenuItemMapping"),
+      stockLocation: ref("StockLocation"),
+      ingredients: arrayOf(ref("RecipeIngredient")),
+    },
+  ),
+  SalesRecord: entity(
+    ["id", "externalKey", "externalItemKey", "soldAt", "quantity"],
+    {
+      id: uuid,
+      externalKey: { type: "string" },
+      externalItemKey: { type: "string" },
+      soldAt: dateTime,
+      quantity: decimal,
+      validationError: nullable({ type: "string" }),
+      mappingId: nullable(uuid),
+    },
+  ),
+  SalesImportBatch: entity(
+    ["id", "facilityId", "source", "externalKey", "status", "createdAt"],
+    {
+      id: uuid,
+      facilityId: uuid,
+      source: { type: "string" },
+      externalKey: { type: "string" },
+      status: {
+        type: "string",
+        enum: ["DRAFT", "VALIDATED", "DATA_INCOMPLETE", "COMMITTED", "FAILED"],
+      },
+      errorSummary: nullable({ type: "object", additionalProperties: true }),
+      createdAt: dateTime,
+      committedAt: nullable(dateTime),
+      facility: ref("Facility"),
+      records: arrayOf(ref("SalesRecord")),
+    },
+  ),
+  SalesImportValidation: entity(["batch_id", "valid", "errors"], {
+    batch_id: uuid,
+    valid: { type: "boolean" },
+    errors: arrayOf(
+      entity(["record_id", "code"], {
+        record_id: uuid,
+        code: { type: "string" },
+      }),
+    ),
+  }),
+  SalesImportCommit: entity(["batch_id", "status"], {
+    batch_id: uuid,
+    status: { type: "string", enum: ["COMMITTED"] },
+  }),
+  IposAdapterStatus: entity(["adapter", "real_ipos_api_connected", "status"], {
+    adapter: { type: "string" },
+    real_ipos_api_connected: { type: "boolean" },
+    status: { type: "string" },
+  }),
+  VarianceResult: entity(
+    [
+      "id",
+      "stocktakeId",
+      "stockLocationId",
+      "ingredientId",
+      "version",
+      "dataStatus",
+      "actualClosingSnapshot",
+      "calculatedAt",
+    ],
+    {
+      id: uuid,
+      stocktakeId: uuid,
+      stockLocationId: uuid,
+      ingredientId: uuid,
+      version: { type: "integer", minimum: 1 },
+      dataStatus: { type: "string", enum: ["COMPLETE", "DATA_INCOMPLETE"] },
+      openingStockSnapshot: nullable(decimal),
+      postedMovementSnapshot: nullable(decimal),
+      expectedUsageSnapshot: nullable(decimal),
+      expectedClosingSnapshot: nullable(decimal),
+      actualClosingSnapshot: decimal,
+      varianceQuantity: nullable(decimal),
+      varianceRate: nullable(decimal),
+      missingData: nullable({ type: "object", additionalProperties: true }),
+      calculatedAt: dateTime,
+      stockLocation: ref("StockLocation"),
+      ingredient: ref("Ingredient"),
+      stocktake: ref("Stocktake"),
+    },
+  ),
+  AlertRule: entity(
+    ["id", "thresholdType", "thresholdValue", "testOnly", "active"],
+    {
+      id: uuid,
+      facilityId: nullable(uuid),
+      ingredientId: nullable(uuid),
+      thresholdType: { type: "string", enum: ["QUANTITY", "PERCENT"] },
+      thresholdValue: decimal,
+      testOnly: { type: "boolean" },
+      active: { type: "boolean" },
+      facility: nullable(ref("Facility")),
+      ingredient: nullable(ref("Ingredient")),
     },
   ),
   User: entity(
@@ -791,6 +1056,63 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       displayName: { type: "string" },
       active: { type: "boolean" },
       lastLoginAt: nullable(dateTime),
+      createdAt: dateTime,
+    },
+  ),
+  Permission: entity(["code", "description"], {
+    code: { type: "string" },
+    description: { type: "string" },
+  }),
+  Role: entity(["id", "code", "name", "system", "active"], {
+    id: uuid,
+    code: { type: "string" },
+    name: { type: "string" },
+    system: { type: "boolean" },
+    active: { type: "boolean" },
+    permissions: arrayOf(
+      entity(["permissionCode"], {
+        permissionCode: { type: "string" },
+        permission: ref("Permission"),
+      }),
+    ),
+  }),
+  RoleGrant: entity(["id", "userId", "roleId", "scopeType", "createdAt"], {
+    id: uuid,
+    userId: uuid,
+    roleId: uuid,
+    scopeType: {
+      type: "string",
+      enum: [
+        "ORGANIZATION",
+        "FACILITY",
+        "STOCK_LOCATION",
+        "DEPARTMENT",
+        "OWN",
+        "SUPPLIER",
+      ],
+    },
+    facilityId: nullable(uuid),
+    stockLocationId: nullable(uuid),
+    departmentId: nullable(uuid),
+    revokedAt: nullable(dateTime),
+    createdAt: dateTime,
+    user: ref("User"),
+    role: ref("Role"),
+    facility: nullable(ref("Facility")),
+    stockLocation: nullable(ref("StockLocation")),
+    department: nullable(ref("Department")),
+  }),
+  AuditEvent: entity(
+    ["id", "action", "resourceType", "resourceId", "createdAt"],
+    {
+      id: uuid,
+      actorId: nullable(uuid),
+      action: { type: "string" },
+      resourceType: { type: "string" },
+      resourceId: { type: "string" },
+      requestId: nullable(uuid),
+      beforeData: nullable({ type: "object", additionalProperties: true }),
+      afterData: nullable({ type: "object", additionalProperties: true }),
       createdAt: dateTime,
     },
   ),
@@ -874,12 +1196,35 @@ function responseSchemaName(path: string): string {
   if (path.startsWith("/discrepancies")) return "DiscrepancyCase";
   if (path.startsWith("/stock-balances")) return "StockBalance";
   if (path.startsWith("/stock-ledger")) return "StockLedgerEntry";
+  if (path === "/notifications/read-all") return "UpdatedCount";
   if (path.startsWith("/notifications")) return "Notification";
+  if (path === "/push-devices/unregister") return "UpdatedCount";
+  if (path.startsWith("/push-devices")) return "PushDevice";
+  if (path.startsWith("/attachments")) return "Attachment";
   if (path.startsWith("/stocktakes")) return "Stocktake";
   if (path.startsWith("/damage-reports")) return "DamageReport";
   if (path.startsWith("/users")) return "User";
+  if (path.startsWith("/roles")) return "Role";
+  if (path.startsWith("/permissions")) return "Permission";
+  if (path.startsWith("/grants")) return "RoleGrant";
+  if (path.startsWith("/audit-events")) return "AuditEvent";
+  if (path.startsWith("/inventory-adjustments")) return "InventoryAdjustment";
+  if (path.startsWith("/menu-item-mappings")) return "MenuItemMapping";
+  if (path.startsWith("/recipes")) return "RecipeVersion";
+  if (path === "/sales-imports/adapter-status") return "IposAdapterStatus";
+  if (/^\/sales-imports\/\{[^}]+\}\/validate$/.test(path))
+    return "SalesImportValidation";
+  if (/^\/sales-imports\/\{[^}]+\}\/commit$/.test(path))
+    return "SalesImportCommit";
+  if (path.startsWith("/sales-imports")) return "SalesImportBatch";
+  if (path.startsWith("/variances")) return "VarianceResult";
+  if (path.startsWith("/alert-rules")) return "AlertRule";
   if (path === "/dashboard/summary") return "DashboardSummary";
-  if (path.startsWith("/reports/")) return "ReportRow";
+  if (path === "/reports/stock") return "StockBalance";
+  if (path === "/reports/fulfillment") return "FulfillmentOrder";
+  if (path === "/reports/damage") return "DamageReport";
+  if (path === "/reports/variance") return "VarianceResult";
+  if (path === "/reports/payment") return "PaymentTrackingReport";
   if (path.startsWith("/health/")) return "HealthStatus";
   return "ConfigurationObject";
 }
@@ -897,14 +1242,26 @@ function successEnvelope(data: Schema, paginated: boolean): Schema {
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
 const ERROR_RESPONSES = [
-  ["400", "Dữ liệu đầu vào không hợp lệ"],
-  ["401", "Thiếu token hoặc phiên đăng nhập không hợp lệ"],
-  ["403", "Không có permission/scope phù hợp"],
-  ["404", "Không tìm thấy tài nguyên trong phạm vi được phép"],
-  ["409", "Xung đột version hoặc idempotency"],
-  ["422", "Trạng thái/policy nghiệp vụ không cho phép"],
-  ["429", "Vượt giới hạn tần suất"],
-  ["500", "Lỗi hệ thống"],
+  ["400", "Dữ liệu đầu vào không hợp lệ", "BadRequestErrorResponse"],
+  [
+    "401",
+    "Thiếu token hoặc phiên đăng nhập không hợp lệ",
+    "UnauthorizedErrorResponse",
+  ],
+  ["403", "Không có permission/scope phù hợp", "ForbiddenErrorResponse"],
+  [
+    "404",
+    "Không tìm thấy tài nguyên trong phạm vi được phép",
+    "NotFoundErrorResponse",
+  ],
+  ["409", "Xung đột version hoặc idempotency", "ConflictErrorResponse"],
+  [
+    "422",
+    "Trạng thái/policy nghiệp vụ không cho phép",
+    "UnprocessableEntityErrorResponse",
+  ],
+  ["429", "Vượt giới hạn tần suất", "TooManyRequestsErrorResponse"],
+  ["500", "Lỗi hệ thống", "InternalServerErrorResponse"],
 ] as const;
 
 /**
@@ -925,13 +1282,27 @@ export function enhanceOpenApiDocument(document: OpenAPIObject): OpenAPIObject {
       if (!operation) continue;
       const schemaName = responseSchemaName(path);
       const paginated = method === "get" && LIST_ROUTES.has(path);
+      const plainList =
+        method === "get" &&
+        (path === "/push-devices" || path === "/attachments");
+      const binary =
+        method === "get" && /^\/attachments\/\{[^}]+\}\/content$/.test(path);
+      const arrayResult =
+        method === "post" &&
+        (path === "/variances/recalculate" ||
+          path === "/source-rules/bulk-update");
       const dataSchema =
         path === "/auth/logout"
           ? ({ nullable: true } as Schema)
-          : paginated
+          : paginated || plainList || arrayResult
             ? arrayOf(ref(schemaName))
             : ref(schemaName);
-      const responseSchema = successEnvelope(dataSchema, paginated);
+      const responseSchema = binary
+        ? ({ type: "string", format: "binary" } as Schema)
+        : successEnvelope(dataSchema, paginated);
+      const mediaType = binary
+        ? "application/octet-stream"
+        : "application/json";
 
       let hasSuccess = false;
       for (const [status, response] of Object.entries(operation.responses)) {
@@ -941,21 +1312,30 @@ export function enhanceOpenApiDocument(document: OpenAPIObject): OpenAPIObject {
         response.description ||= "Thao tác thành công.";
         response.content = {
           ...(response.content ?? {}),
-          "application/json": { schema: responseSchema },
+          [mediaType]: { schema: responseSchema },
         };
       }
       if (!hasSuccess) {
         operation.responses["200"] = {
           description: "Thao tác thành công.",
-          content: { "application/json": { schema: responseSchema } },
+          content: { [mediaType]: { schema: responseSchema } },
         };
       }
-      for (const [status, description] of ERROR_RESPONSES) {
-        operation.responses[status] ??= {
-          description,
-          content: {
-            "application/json": { schema: ref("ApiErrorResponse") },
-          },
+      for (const [status, description, errorSchemaName] of ERROR_RESPONSES) {
+        const current = operation.responses[status];
+        if (!current || "$ref" in current) {
+          operation.responses[status] = {
+            description,
+            content: {
+              "application/json": { schema: ref(errorSchemaName) },
+            },
+          };
+          continue;
+        }
+        current.description ||= description;
+        current.content = {
+          ...(current.content ?? {}),
+          "application/json": { schema: ref(errorSchemaName) },
         };
       }
       (operation as unknown as Record<string, unknown>)[

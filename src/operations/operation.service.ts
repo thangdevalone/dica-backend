@@ -595,6 +595,14 @@ export class OperationService {
             afterData: { status: "SUBMITTED", version: updated.version },
           },
         });
+        await tx.outboxEvent.create({
+          data: {
+            type: "STOCKTAKE_SUBMITTED",
+            aggregateType: "Stocktake",
+            aggregateId: id,
+            payload: { stocktake_id: id },
+          },
+        });
         return updated;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -923,6 +931,14 @@ export class OperationService {
             inventory_posted: false,
             policy: "DEMO_V1",
           },
+        },
+      });
+      await tx.outboxEvent.create({
+        data: {
+          type: "DAMAGE_CONFIRMED",
+          aggregateType: "DamageReport",
+          aggregateId: id,
+          payload: { damage_report_id: id },
         },
       });
       return updated;

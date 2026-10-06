@@ -57,14 +57,14 @@ export class OrderController {
     return this.s.detail(u, id);
   }
   @Get("supplier/orders")
-  @ApiEndpoint("Nhà cung cấp xem các đơn được giao", { audience: "mobile" })
+  @ApiEndpoint("Nhà cung cấp xem các đơn được giao", { audience: "future" })
   @RequirePermissions("supplier_order.read_own")
   supplier(@CurrentUser() u: AuthUser, @Query() q: PaginationDto) {
     return this.s.supplierList(u, q);
   }
   @Get("supplier/orders/:id")
   @ApiEndpoint("Nhà cung cấp xem chi tiết đơn được giao", {
-    audience: "mobile",
+    audience: "future",
   })
   @RequirePermissions("supplier_order.read_own")
   supplierDetail(

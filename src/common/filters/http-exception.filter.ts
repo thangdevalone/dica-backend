@@ -59,7 +59,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
       success: false,
       code:
         payload.code ??
-        (validation ? ErrorCode.VALIDATION_ERROR : ErrorCode.INTERNAL_ERROR),
+        (validation
+          ? ErrorCode.VALIDATION_ERROR
+          : status === HttpStatus.BAD_REQUEST
+            ? ErrorCode.VALIDATION_ERROR
+            : status === HttpStatus.UNAUTHORIZED
+              ? ErrorCode.AUTH_SESSION_INVALID
+              : status === HttpStatus.FORBIDDEN
+                ? ErrorCode.FORBIDDEN
+                : status === HttpStatus.NOT_FOUND
+                  ? ErrorCode.RESOURCE_NOT_FOUND
+                  : status === HttpStatus.CONFLICT
+                    ? ErrorCode.VERSION_CONFLICT
+                    : status === HttpStatus.UNPROCESSABLE_ENTITY
+                      ? ErrorCode.INVALID_STATE
+                      : status === HttpStatus.TOO_MANY_REQUESTS
+                        ? ErrorCode.RATE_LIMITED
+                        : ErrorCode.INTERNAL_ERROR),
       message,
       ...(validation ? { details: validation } : {}),
       request_id: req.requestId,

@@ -7,6 +7,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../database/prisma.service.js";
 import { OutboxStatus, Prisma, ScopeType } from "../generated/prisma/client.js";
+import { PushService } from "../push/push.service.js";
 
 interface GrantShape {
   scopeType: ScopeType;
@@ -26,6 +27,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly db: PrismaService,
     private readonly config: ConfigService,
+    private readonly push: PushService,
   ) {}
 
   onModuleInit() {
@@ -68,7 +70,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processOne() {
-    return this.db.$transaction(
+    const result = await this.db.$transaction(
       async (tx) => {
         const event = await tx.outboxEvent.findFirst({
           where: {
@@ -78,7 +80,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
           },
           orderBy: { createdAt: "asc" },
         });
-        if (!event) return false;
+        if (!event) return { processed: false, notifications: [] };
         await tx.outboxEvent.update({
           where: { id: event.id },
           data: { status: OutboxStatus.PROCESSING, attempts: { increment: 1 } },
@@ -89,8 +91,9 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
             event.type,
             event.aggregateId,
           );
-          if (notifications.length)
-            await tx.notification.createMany({ data: notifications });
+          const created = [];
+          for (const notification of notifications)
+            created.push(await tx.notification.create({ data: notification }));
           await tx.outboxEvent.update({
             where: { id: event.id },
             data: {
@@ -99,6 +102,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
               lastError: null,
             },
           });
+          return { processed: true, notifications: created };
         } catch (error) {
           await tx.outboxEvent.update({
             where: { id: event.id },
@@ -111,11 +115,14 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
               availableAt: new Date(Date.now() + 30_000),
             },
           });
+          return { processed: true, notifications: [] };
         }
-        return true;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    if (result.notifications.length)
+      await this.push.sendNotifications(result.notifications);
+    return result.processed;
   }
 
   private async buildNotifications(
@@ -161,32 +168,63 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
     if (type === "REQUEST_APPROVED") {
       const request = await tx.supplyRequest.findUnique({
         where: { id: aggregateId },
-        include: { orders: { select: { supplierId: true } } },
+        include: {
+          orders: { select: { id: true, code: true, supplierId: true } },
+        },
       });
       if (!request) return [];
-      const recipientIds = new Set<string>([request.createdById]);
       const supplierIds = request.orders.flatMap((order) =>
         order.supplierId ? [order.supplierId] : [],
       );
-      if (supplierIds.length) {
-        const supplierUsers = await tx.user.findMany({
-          where: {
-            organizationId: request.organizationId,
-            supplierId: { in: supplierIds },
-            active: true,
-          },
-          select: { id: true },
-        });
-        supplierUsers.forEach((user) => recipientIds.add(user.id));
-      }
-      return [...recipientIds].map((userId) => ({
-        organizationId: request.organizationId,
-        userId,
-        title: "Yêu cầu hàng đã được duyệt",
-        message: `Yêu cầu ${request.code} đã được duyệt và phát hành đơn.`,
-        resourceType: "SupplyRequest",
-        resourceId: request.id,
-      }));
+      const supplierUsers = supplierIds.length
+        ? await tx.user.findMany({
+            where: {
+              organizationId: request.organizationId,
+              supplierId: { in: supplierIds },
+              active: true,
+            },
+            select: { id: true, supplierId: true },
+          })
+        : [];
+      const notifications: Prisma.NotificationCreateManyInput[] = [
+        {
+          organizationId: request.organizationId,
+          userId: request.createdById,
+          title: "Yêu cầu hàng đã được duyệt",
+          message: `Yêu cầu ${request.code} đã được duyệt và phát hành đơn.`,
+          resourceType: "SupplyRequest",
+          resourceId: request.id,
+        },
+      ];
+      for (const order of request.orders)
+        for (const user of supplierUsers)
+          if (user.supplierId === order.supplierId)
+            notifications.push({
+              organizationId: request.organizationId,
+              userId: user.id,
+              title: "Đơn nhà cung cấp mới",
+              message: `Đơn ${order.code} đã được phát hành cho nhà cung cấp.`,
+              resourceType: "FulfillmentOrder",
+              resourceId: order.id,
+            });
+      return notifications;
+    }
+
+    if (type === "REQUEST_REJECTED") {
+      const request = await tx.supplyRequest.findUnique({
+        where: { id: aggregateId },
+      });
+      if (!request) return [];
+      return [
+        {
+          organizationId: request.organizationId,
+          userId: request.createdById,
+          title: "Yêu cầu hàng bị từ chối",
+          message: `Yêu cầu ${request.code} đã bị từ chối. Mở phiếu để xem lý do.`,
+          resourceType: "SupplyRequest",
+          resourceId: request.id,
+        },
+      ];
     }
 
     if (type === "TRANSFER_SUBMITTED") {
@@ -225,6 +263,67 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
         }));
     }
 
+    if (type === "TRANSFER_APPROVED" || type === "TRANSFER_REJECTED") {
+      const transfer = await tx.transfer.findUnique({
+        where: { id: aggregateId },
+        include: {
+          toStockLocation: true,
+          orders: { select: { id: true, code: true }, take: 1 },
+        },
+      });
+      if (!transfer) return [];
+      const approved = type === "TRANSFER_APPROVED";
+      const notifications: Prisma.NotificationCreateManyInput[] = [
+        {
+          organizationId: transfer.organizationId,
+          userId: transfer.createdById,
+          title: approved
+            ? "Điều chuyển đã được duyệt"
+            : "Điều chuyển bị từ chối",
+          message: approved
+            ? `Điều chuyển ${transfer.code} đã được duyệt và sẵn sàng xử lý.`
+            : `Điều chuyển ${transfer.code} đã bị từ chối.`,
+          resourceType: "Transfer",
+          resourceId: transfer.id,
+        },
+      ];
+      if (type === "TRANSFER_APPROVED") {
+        const receivers = await this.usersWithPermission(
+          tx,
+          transfer.organizationId,
+          "receipt.create",
+        );
+        const order = transfer.orders[0];
+        if (order)
+          receivers
+            .filter((user) =>
+              user.grants.some(
+                (grant) =>
+                  this.hasPermission(grant, "receipt.create") &&
+                  this.matches(
+                    grant,
+                    transfer.toStockLocation.facilityId,
+                    transfer.toStockLocationId,
+                    null,
+                    transfer.createdById,
+                    user.id,
+                  ),
+              ),
+            )
+            .forEach((user) =>
+              notifications.push({
+                organizationId: transfer.organizationId,
+                userId: user.id,
+                title: "Có điều chuyển cần nhận hàng",
+                message: `Đơn ${order.code} từ điều chuyển ${transfer.code} đã sẵn sàng xử lý.`,
+                resourceType: "FulfillmentOrder",
+                resourceId: order.id,
+              }),
+            );
+      }
+      return notifications;
+    }
+
     if (type === "DAMAGE_SUBMITTED") {
       const report = await tx.damageReport.findUnique({
         where: { id: aggregateId },
@@ -259,6 +358,114 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
           resourceType: "DamageReport",
           resourceId: report.id,
         }));
+    }
+
+    if (type === "DAMAGE_CONFIRMED") {
+      const report = await tx.damageReport.findUnique({
+        where: { id: aggregateId },
+        include: { stockLocation: { include: { facility: true } } },
+      });
+      if (!report) return [];
+      return [
+        {
+          organizationId: report.stockLocation.facility.organizationId,
+          userId: report.createdById,
+          title: "Báo hỏng đã được xác nhận",
+          message: `Báo hỏng ${report.code} đã được xác nhận.`,
+          resourceType: "DamageReport",
+          resourceId: report.id,
+        },
+      ];
+    }
+
+    if (type === "STOCKTAKE_SUBMITTED") {
+      const stocktake = await tx.stocktake.findUnique({
+        where: { id: aggregateId },
+        include: {
+          stockLocation: { include: { facility: true } },
+          lines: true,
+        },
+      });
+      if (
+        !stocktake ||
+        !stocktake.lines.some(
+          (line) => line.varianceQuantity?.isZero() === false,
+        )
+      )
+        return [];
+      const users = await this.usersWithPermission(
+        tx,
+        stocktake.stockLocation.facility.organizationId,
+        "variance.read",
+      );
+      return users
+        .filter((user) =>
+          user.grants.some(
+            (grant) =>
+              this.hasPermission(grant, "variance.read") &&
+              this.matches(
+                grant,
+                stocktake.stockLocation.facilityId,
+                stocktake.stockLocationId,
+                null,
+                stocktake.createdById,
+                user.id,
+              ),
+          ),
+        )
+        .map((user) => ({
+          organizationId: stocktake.stockLocation.facility.organizationId,
+          userId: user.id,
+          title: "Kiểm kê có sai lệch",
+          message: `Phiếu kiểm kê ngày ${stocktake.businessDate.toISOString().slice(0, 10)} có chênh lệch cần kiểm tra.`,
+          resourceType: "Stocktake",
+          resourceId: stocktake.id,
+        }));
+    }
+
+    if (type === "RECEIPT_DISCREPANCY") {
+      const receipt = await tx.receipt.findUnique({
+        where: { id: aggregateId },
+        include: {
+          order: {
+            include: {
+              destinationStockLocation: { include: { facility: true } },
+            },
+          },
+          discrepancies: { where: { status: "OPEN" } },
+        },
+      });
+      if (!receipt || !receipt.discrepancies.length) return [];
+      const location = receipt.order.destinationStockLocation;
+      const users = await this.usersWithPermission(
+        tx,
+        location.facility.organizationId,
+        "discrepancy.resolve",
+      );
+      const recipients = users.filter((user) =>
+        user.grants.some(
+          (grant) =>
+            this.hasPermission(grant, "discrepancy.resolve") &&
+            this.matches(
+              grant,
+              location.facilityId,
+              location.id,
+              null,
+              receipt.createdById,
+              user.id,
+            ),
+        ),
+      );
+      return receipt.discrepancies.flatMap((discrepancy) =>
+        recipients.map((user) => ({
+          organizationId: location.facility.organizationId,
+          userId: user.id,
+          title: "Nhận hàng có sai lệch",
+          message: `Phiếu nhận ${receipt.code} có sai lệch ${discrepancy.type.toLowerCase()} cần xử lý.`,
+          resourceType: "DiscrepancyCase",
+          resourceId: discrepancy.id,
+        })),
+      );
     }
     return [];
   }

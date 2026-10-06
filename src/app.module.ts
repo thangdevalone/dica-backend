@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { randomUUID } from "node:crypto";
 import { LoggerModule } from "nestjs-pino";
 import { AuthModule } from "./auth/auth.module.js";
+import { AttachmentModule } from "./attachments/attachment.module.js";
 import { CatalogModule } from "./catalog/catalog.module.js";
 import { ConfigAuditInterceptor } from "./common/audit/config-audit.interceptor.js";
 import { IdempotencyModule } from "./common/idempotency/idempotency.module.js";
@@ -90,6 +91,7 @@ import { UserModule } from "./users/user.module.js";
     DatabaseModule,
     IdempotencyModule,
     AuthModule,
+    AttachmentModule,
     HealthModule,
     OrganizationModule,
     CatalogModule,

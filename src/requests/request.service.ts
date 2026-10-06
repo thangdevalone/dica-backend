@@ -588,6 +588,14 @@ export class RequestService {
             note: d.note,
           },
         });
+        await tx.outboxEvent.create({
+          data: {
+            type: "REQUEST_REJECTED",
+            aggregateType: "SupplyRequest",
+            aggregateId: id,
+            payload: { request_id: id },
+          },
+        });
         return tx.supplyRequest.findUniqueOrThrow({ where: { id } });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

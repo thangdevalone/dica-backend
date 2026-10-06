@@ -723,6 +723,18 @@ export class DeliveryService {
             afterData: { status: "POSTED" },
           },
         });
+        const discrepancyCount = await tx.discrepancyCase.count({
+          where: { receiptId: id, status: DiscrepancyStatus.OPEN },
+        });
+        if (discrepancyCount)
+          await tx.outboxEvent.create({
+            data: {
+              type: "RECEIPT_DISCREPANCY",
+              aggregateType: "Receipt",
+              aggregateId: id,
+              payload: { receipt_id: id, discrepancy_count: discrepancyCount },
+            },
+          });
         return { receipt_id: id, status: "POSTED" } as Prisma.JsonObject;
       },
     );

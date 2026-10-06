@@ -1,7 +1,7 @@
 import { applyDecorators } from "@nestjs/common";
 import { ApiBody, ApiExtension, ApiOperation } from "@nestjs/swagger";
 
-export type ApiAudience = "mobile" | "admin-web" | "both" | "system";
+export type ApiAudience = "mobile" | "admin-web" | "both" | "system" | "future";
 
 interface ApiEndpointOptions {
   audience?: ApiAudience;
@@ -35,6 +35,11 @@ const AUDIENCE_DOC: Record<
     label: "SYSTEM",
     description:
       "Đối tượng tích hợp: hạ tầng giám sát/vận hành; không dùng trực tiếp trên Mobile hoặc Admin Web.",
+  },
+  future: {
+    label: "CHƯA TÍCH HỢP",
+    description:
+      "Endpoint đã có contract nhưng chưa thuộc phạm vi tích hợp của Mobile hoặc Admin Web hiện tại.",
   },
 };
 

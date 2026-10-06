@@ -187,6 +187,8 @@ model Organization {
   orders        FulfillmentOrder[]
   auditEvents   AuditEvent[]
   notifications Notification[]
+  pushDevices   PushDevice[]
+  attachments   Attachment[]
   transfers     Transfer[]
   menuMappings  MenuItemMapping[]
   salesBatches  SalesImportBatch[]
@@ -283,31 +285,33 @@ model Department {
 }
 
 model User {
-  id               String          @id @default(uuid()) @db.Uuid
-  organizationId   String          @map("organization_id") @db.Uuid
-  supplierId       String?         @map("supplier_id") @db.Uuid
-  kind             UserKind        @default(INTERNAL)
-  username         String          @db.VarChar(100)
-  displayName      String          @map("display_name") @db.VarChar(200)
-  identityNumber   String?         @map("identity_number") @db.VarChar(20)
-  dateOfBirth      DateTime?       @map("date_of_birth") @db.Date
-  phone            String?         @db.VarChar(30)
-  email            String?         @db.VarChar(254)
-  address          String?         @db.VarChar(500)
-  passwordHash     String          @map("password_hash")
-  active           Boolean         @default(true)
-  tokenVersion     Int             @default(0) @map("token_version")
-  lastLoginAt      DateTime?       @map("last_login_at")
-  createdAt        DateTime        @default(now()) @map("created_at")
-  updatedAt        DateTime        @updatedAt @map("updated_at")
-  organization     Organization    @relation(fields: [organizationId], references: [id])
-  supplier         Supplier?       @relation(fields: [supplierId], references: [id])
-  sessions         Session[]
-  grants           RoleGrant[]
-  createdRequests  SupplyRequest[] @relation("RequestCreator")
-  auditEvents      AuditEvent[]
-  notifications    Notification[]
-  createdTransfers Transfer[]      @relation("TransferCreator")
+  id                  String          @id @default(uuid()) @db.Uuid
+  organizationId      String          @map("organization_id") @db.Uuid
+  supplierId          String?         @map("supplier_id") @db.Uuid
+  kind                UserKind        @default(INTERNAL)
+  username            String          @db.VarChar(100)
+  displayName         String          @map("display_name") @db.VarChar(200)
+  identityNumber      String?         @map("identity_number") @db.VarChar(20)
+  dateOfBirth         DateTime?       @map("date_of_birth") @db.Date
+  phone               String?         @db.VarChar(30)
+  email               String?         @db.VarChar(254)
+  address             String?         @db.VarChar(500)
+  passwordHash        String          @map("password_hash")
+  active              Boolean         @default(true)
+  tokenVersion        Int             @default(0) @map("token_version")
+  lastLoginAt         DateTime?       @map("last_login_at")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+  organization        Organization    @relation(fields: [organizationId], references: [id])
+  supplier            Supplier?       @relation(fields: [supplierId], references: [id])
+  sessions            Session[]
+  grants              RoleGrant[]
+  createdRequests     SupplyRequest[] @relation("RequestCreator")
+  auditEvents         AuditEvent[]
+  notifications       Notification[]
+  pushDevices         PushDevice[]
+  uploadedAttachments Attachment[]
+  createdTransfers    Transfer[]      @relation("TransferCreator")
 
   @@unique([organizationId, username])
   @@unique([organizationId, identityNumber])
@@ -1163,6 +1167,44 @@ model Notification {
   @@index([userId, status, createdAt])
   @@index([userId, createdAt, id])
   @@map("notifications")
+}
+
+model PushDevice {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  token          String       @unique @db.VarChar(4096)
+  platform       String       @default("ANDROID") @db.VarChar(20)
+  deviceId       String?      @map("device_id") @db.VarChar(200)
+  appVersion     String?      @map("app_version") @db.VarChar(50)
+  active         Boolean      @default(true)
+  lastSeenAt     DateTime     @default(now()) @map("last_seen_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active, updatedAt])
+  @@index([organizationId, active])
+  @@map("push_devices")
+}
+
+model Attachment {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  uploadedById   String       @map("uploaded_by_id") @db.Uuid
+  resourceType   String       @map("resource_type") @db.VarChar(30)
+  resourceId     String       @map("resource_id") @db.Uuid
+  fileName       String       @map("file_name") @db.VarChar(255)
+  mimeType       String       @map("mime_type") @db.VarChar(100)
+  sizeBytes      Int          @map("size_bytes")
+  content        Bytes
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, resourceType, resourceId, createdAt])
+  @@map("attachments")
 }
 
 model OutboxEvent {

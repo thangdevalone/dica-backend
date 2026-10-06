@@ -43,6 +43,20 @@ Response lỗi:
 
 Luôn log `request_id` khi gửi lỗi cho backend dev.
 
+Các response status trong Swagger đều có type riêng:
+
+| Status       | Response type                                       |
+| ------------ | --------------------------------------------------- |
+| `200`, `201` | Success envelope với `data` đúng model của endpoint |
+| `400`        | `BadRequestErrorResponse`                           |
+| `401`        | `UnauthorizedErrorResponse`                         |
+| `403`        | `ForbiddenErrorResponse`                            |
+| `404`        | `NotFoundErrorResponse`                             |
+| `409`        | `ConflictErrorResponse`                             |
+| `422`        | `UnprocessableEntityErrorResponse`                  |
+| `429`        | `TooManyRequestsErrorResponse`                      |
+| `500`        | `InternalServerErrorResponse`                       |
+
 ## 2. Khởi tạo phiên Mobile
 
 ### Đăng nhập
@@ -88,7 +102,6 @@ Không giả định tài khoản chỉ thuộc một chi nhánh. Selector phả
 | Báo hỏng         | `GET/POST /damage-reports`, `PUT /damage-reports/{id}`, command submit                                             | `damage.*`                                    |
 | Tồn kho          | `GET /stock-balances`, `GET /stock-ledger`                                                                         | `stock.read`, `stock_ledger.read`             |
 | Thông báo        | `GET /notifications`, detail, read, read-all                                                                       | `notification.*`                              |
-| Đơn NCC          | `GET /supplier/orders`, `GET /supplier/orders/{id}`                                                                | `supplier_order.read_own`                     |
 
 Mobile **không gọi** API cấu hình user/role/cơ sở/danh mục/nguồn, duyệt yêu cầu, duyệt điều chuyển, xử lý chênh lệch, payment, report, iPOS, audit hoặc health readiness.
 
@@ -192,6 +205,15 @@ Idempotency-Key: mobile:<uuid>
 
 Backend tự phân loại đủ/thiếu/thừa. Nếu thiếu, đơn còn `PARTIAL` và có thể tạo receipt bù lần sau. Nếu thừa, receipt có thể vào `PENDING_EXCESS_REVIEW`; Mobile không tự cộng phần thừa trước quyết định backend. Màn hình lịch sử đọc `GET /receipts`, `GET /receipts/{id}` và `GET /discrepancies?status=OPEN`.
 
+Sau khi tạo receipt và trước hoặc sau khi post, tải nhiều ảnh xác nhận bằng `multipart/form-data`:
+
+```http
+POST /attachments
+Content-Type: multipart/form-data
+```
+
+Các part gồm `resource_type=RECEIPT`, `resource_id=<receipt-uuid>` và `file=<ảnh>`. Mỗi ảnh tối đa 5 MB; hỗ trợ JPEG, PNG, WEBP, HEIC/HEIF. Xem danh sách bằng `GET /attachments?resource_type=RECEIPT&resource_id=<uuid>` và tải ảnh bằng `GET /attachments/{id}/content`.
+
 Nếu hàng bị hỏng và bị từ chối ngay tại điểm nhận, `quantity` chỉ là lượng chấp nhận thực tế và ghi rõ tình trạng trong `note`; phần không nhận sẽ thành thiếu. Backend chưa có trường receipt riêng để phân loại `DAMAGED` hoặc flow trả NCC.
 
 ## 6. Flow Điều chuyển
@@ -283,25 +305,40 @@ POST /damage-reports/{id}/submit
 
 Submit chưa trừ tồn. Chỉ sau khi người có quyền xác nhận trên Web, phiếu thành `CONFIRMED` và ledger mới ghi giảm tồn.
 
-## 9. Thông báo
+Ảnh báo hỏng dùng cùng attachment API với `resource_type=DAMAGE_REPORT` và `resource_id=<damage-report-uuid>`.
+
+## 9. Thông báo và FCM Android/iOS
 
 - Danh sách: `GET /notifications?status=UNREAD&page=1&page_size=20`.
 - Detail: `GET /notifications/{id}`; server kiểm tra lại quyền đọc resource tại thời điểm mở.
 - Đọc một: `POST /notifications/{id}/read`, body `{}`.
 - Đọc tất cả: `POST /notifications/read-all`, body `{}`.
 
-Trong phiên bản đầu, poll danh sách khi app foreground/resume và sau mutation nghiệp vụ. Push notification native chưa phải contract bắt buộc của backend hiện tại.
+Sau khi Firebase Messaging cấp hoặc refresh registration token, đăng ký thiết bị:
 
-## 10. Tài khoản nhà cung ứng
+`POST /push-devices`
 
-Nhà cung ứng đăng nhập cùng app nhưng chỉ hiển thị module đơn của mình:
+```json
+{
+  "token": "<fcm-registration-token>",
+  "platform": "IOS",
+  "device_id": "<installation-id-do-app-tu-sinh>",
+  "app_version": "1.0.0+12"
+}
+```
 
-- `GET /supplier/orders`
-- `GET /supplier/orders/{id}`
+- Gọi lại endpoint này mỗi khi FCM refresh token, user đăng nhập hoặc app được cài lại.
+- `platform` nhận `ANDROID` hoặc `IOS`; Android có thể bỏ qua trường này để dùng mặc định `ANDROID`, còn iPhone phải gửi `IOS`.
+- Khi logout, gọi `POST /push-devices/unregister` với `{ "token": "<token>" }` trước khi xóa access token.
+- Có thể xem các thiết bị đang hoạt động bằng `GET /push-devices`.
+- Android phải tạo notification channel id `dica_operations` (hoặc giá trị backend cấu hình tại `FCM_ANDROID_CHANNEL_ID`).
+- iOS phải xin quyền notification, đăng ký APNs/FCM token và cấu hình APNs authentication key cho iOS app trong Firebase Console. Backend vẫn dùng cùng Firebase service account, không cần thêm private key APNs vào `.env`.
+- Payload data gồm `notification_id`, `resource_type`, `resource_id`, `route`. Khi người dùng chạm push, ưu tiên điều hướng theo `resource_type/resource_id`; luôn tải detail lại từ API và không tin nội dung push làm dữ liệu nghiệp vụ.
+- Các sự kiện đang phát push: yêu cầu được duyệt/từ chối, điều chuyển chờ duyệt/được duyệt/bị từ chối, nhận hàng sai lệch, kiểm kê có chênh lệch, báo hỏng chờ xử lý/đã xác nhận.
 
-Projection này là read-only và không trả tồn kho, payment, request cha, audit hoặc dữ liệu NCC khác. Không hiển thị nút tạo receipt/dispatch, xác nhận giao, xử lý chênh lệch hay cập nhật thanh toán cho user `kind=SUPPLIER`.
+Vẫn poll `GET /notifications` khi app foreground/resume vì push chỉ là tín hiệu best-effort. Backend luôn lưu notification trong database trước rồi mới gửi FCM; FCM lỗi không làm rollback nghiệp vụ.
 
-## 11. Lỗi cần xử lý riêng
+## 10. Lỗi cần xử lý riêng
 
 | Code                                                | Xử lý trên Mobile                                                 |
 | --------------------------------------------------- | ----------------------------------------------------------------- |
@@ -317,8 +354,8 @@ Projection này là read-only và không trả tồn kho, payment, request cha, 
 | `INVALID_STATE`                                     | Reload document; trạng thái đã đổi ở thiết bị khác                |
 | `POLICY_NOT_CONFIGURED`                             | Không retry; báo nghiệp vụ chưa được bật ở môi trường hiện tại    |
 
-## 12. Chưa tích hợp trong Mobile v1
+## 11. Chưa tích hợp trong Mobile v1
 
-- Upload/chụp ảnh minh chứng: backend chưa phát hành attachment API do chưa chốt storage và giới hạn file. Không nhét base64 vào `note`.
 - `An toàn`, `Lưu mẫu`, `Truy xuất lô`, app khách hàng, đánh giá và chấm công: phạm vi làm sau.
 - Cấu hình iPOS/recipe, báo cáo tổng hợp, payment, user/role, danh mục và nguồn cấp: chỉ Admin Web.
+- `GET /supplier/orders` và `GET /supplier/orders/{id}`: backend còn giữ contract dự phòng nhưng được gắn nhãn `[CHƯA TÍCH HỢP]`; không làm app/module riêng cho nhà cung ứng theo `flow.md`.

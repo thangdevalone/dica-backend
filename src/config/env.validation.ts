@@ -60,10 +60,28 @@ export const envSchema = Joi.object({
     .max(300_000)
     .default(30_000),
   DEMO_POLICY_ENABLED: Joi.boolean().default(false),
+  FCM_ENABLED: Joi.boolean().default(false),
+  FCM_PROJECT_ID: Joi.string().trim().allow("").default(""),
+  FCM_CLIENT_EMAIL: Joi.string().trim().allow("").default(""),
+  FCM_PRIVATE_KEY: Joi.string().allow("").default(""),
+  FCM_ANDROID_CHANNEL_ID: Joi.string()
+    .trim()
+    .max(100)
+    .default("dica_operations"),
 }).custom((environment: Record<string, unknown>, helpers) => {
   if (environment["JWT_ACCESS_SECRET"] === environment["JWT_REFRESH_SECRET"])
     return helpers.error("any.custom", {
       message: "JWT access secret và refresh secret phải khác nhau.",
+    });
+  if (
+    environment["FCM_ENABLED"] === true &&
+    (!environment["FCM_PROJECT_ID"] ||
+      !environment["FCM_CLIENT_EMAIL"] ||
+      !environment["FCM_PRIVATE_KEY"])
+  )
+    return helpers.error("any.custom", {
+      message:
+        "FCM_PROJECT_ID, FCM_CLIENT_EMAIL and FCM_PRIVATE_KEY are required when FCM_ENABLED=true.",
     });
   return environment;
 });

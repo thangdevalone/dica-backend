@@ -27,10 +27,10 @@ export class ReportingService {
     });
     return {
       data: {
-        order_id: order.id,
-        order_code: order.code,
-        reconciled_value: reconciledValue.toFixed(4),
-        paid_value: tracking?.paidValue.toFixed(4) ?? "0.0000",
+        orderId: order.id,
+        orderCode: order.code,
+        reconciledValue: reconciledValue.toFixed(4),
+        paidValue: tracking?.paidValue.toFixed(4) ?? "0.0000",
         status: tracking?.status ?? PaymentStatus.UNPAID,
         version: tracking?.version ?? 0,
       },
@@ -127,9 +127,10 @@ export class ReportingService {
           },
         });
         return {
-          order_id: orderId,
-          reconciled_value: tracking.reconciledValue.toString(),
-          paid_value: tracking.paidValue.toString(),
+          orderId,
+          orderCode: order.code,
+          reconciledValue: tracking.reconciledValue.toString(),
+          paidValue: tracking.paidValue.toString(),
           status: tracking.status,
           version: tracking.version,
         } as Prisma.JsonObject;

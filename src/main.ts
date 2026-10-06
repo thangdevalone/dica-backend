@@ -60,7 +60,7 @@ async function bootstrap(): Promise<void> {
       .setDescription(
         [
           "API quản lý nguồn cấp, yêu cầu hàng, giao nhận và tồn kho DICA.",
-          "Mỗi endpoint có nhãn tích hợp trong tiêu đề: `[MOBILE]`, `[ADMIN WEB]`, `[MOBILE + ADMIN WEB]` hoặc `[SYSTEM]`.",
+          "Mỗi endpoint có nhãn tích hợp trong tiêu đề: `[MOBILE]`, `[ADMIN WEB]`, `[MOBILE + ADMIN WEB]`, `[SYSTEM]` hoặc `[CHƯA TÍCH HỢP]`.",
           "Các thao tác POST/PUT/PATCH hiển thị schema body; mọi operation có success/error response envelope, data schema, enum và pagination type để sinh client.",
         ].join("\n\n"),
       )

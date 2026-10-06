@@ -69,6 +69,27 @@ test("mọi business route đều khai báo permission hoặc public rõ ràng",
   assert.deepEqual(missing, []);
 });
 
+test("FCM can stay disabled without credentials and requires a service account when enabled", () => {
+  assert.equal(
+    envSchema.validate({ ...validEnvironment, FCM_ENABLED: false }).error,
+    undefined,
+  );
+  assert.ok(
+    envSchema.validate({ ...validEnvironment, FCM_ENABLED: true }).error,
+  );
+  assert.equal(
+    envSchema.validate({
+      ...validEnvironment,
+      FCM_ENABLED: true,
+      FCM_PROJECT_ID: "dica-project",
+      FCM_CLIENT_EMAIL: "firebase-admin@example.iam.gserviceaccount.com",
+      FCM_PRIVATE_KEY:
+        "-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----\\n",
+    }).error,
+    undefined,
+  );
+});
+
 function filesUnder(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const fullPath = path.join(directory, entry.name);

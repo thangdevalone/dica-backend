@@ -176,67 +176,111 @@ export class InventoryService {
     const orderIds = idsFor("FulfillmentOrder");
     const transferIds = idsFor("Transfer");
     const damageIds = idsFor("DamageReport");
+    const discrepancyIds = idsFor("DiscrepancyCase");
+    const stocktakeIds = idsFor("Stocktake");
 
-    const [requests, orders, transfers, damages] = await Promise.all([
-      requestIds.length
-        ? this.db.supplyRequest.findMany({
-            where: {
-              id: { in: requestIds },
-              organizationId: u.organizationId,
-            },
-            select: {
-              id: true,
-              facilityId: true,
-              departmentId: true,
-              createdById: true,
-            },
-          })
-        : [],
-      orderIds.length
-        ? this.db.fulfillmentOrder.findMany({
-            where: { id: { in: orderIds }, organizationId: u.organizationId },
-            select: {
-              id: true,
-              supplierId: true,
-              destinationStockLocationId: true,
-              destinationStockLocation: { select: { facilityId: true } },
-              sourceStockLocationId: true,
-              sourceStockLocation: { select: { facilityId: true } },
-            },
-          })
-        : [],
-      transferIds.length
-        ? this.db.transfer.findMany({
-            where: {
-              id: { in: transferIds },
-              organizationId: u.organizationId,
-            },
-            select: {
-              id: true,
-              fromStockLocationId: true,
-              fromStockLocation: { select: { facilityId: true } },
-              toStockLocationId: true,
-              toStockLocation: { select: { facilityId: true } },
-            },
-          })
-        : [],
-      damageIds.length
-        ? this.db.damageReport.findMany({
-            where: {
-              id: { in: damageIds },
-              stockLocation: {
-                facility: { organizationId: u.organizationId },
+    const [requests, orders, transfers, damages, discrepancies, stocktakes] =
+      await Promise.all([
+        requestIds.length
+          ? this.db.supplyRequest.findMany({
+              where: {
+                id: { in: requestIds },
+                organizationId: u.organizationId,
               },
-            },
-            select: {
-              id: true,
-              stockLocationId: true,
-              createdById: true,
-              stockLocation: { select: { facilityId: true } },
-            },
-          })
-        : [],
-    ]);
+              select: {
+                id: true,
+                facilityId: true,
+                departmentId: true,
+                createdById: true,
+              },
+            })
+          : [],
+        orderIds.length
+          ? this.db.fulfillmentOrder.findMany({
+              where: { id: { in: orderIds }, organizationId: u.organizationId },
+              select: {
+                id: true,
+                supplierId: true,
+                destinationStockLocationId: true,
+                destinationStockLocation: { select: { facilityId: true } },
+                sourceStockLocationId: true,
+                sourceStockLocation: { select: { facilityId: true } },
+              },
+            })
+          : [],
+        transferIds.length
+          ? this.db.transfer.findMany({
+              where: {
+                id: { in: transferIds },
+                organizationId: u.organizationId,
+              },
+              select: {
+                id: true,
+                fromStockLocationId: true,
+                fromStockLocation: { select: { facilityId: true } },
+                toStockLocationId: true,
+                toStockLocation: { select: { facilityId: true } },
+              },
+            })
+          : [],
+        damageIds.length
+          ? this.db.damageReport.findMany({
+              where: {
+                id: { in: damageIds },
+                stockLocation: {
+                  facility: { organizationId: u.organizationId },
+                },
+              },
+              select: {
+                id: true,
+                stockLocationId: true,
+                createdById: true,
+                stockLocation: { select: { facilityId: true } },
+              },
+            })
+          : [],
+        discrepancyIds.length
+          ? this.db.discrepancyCase.findMany({
+              where: {
+                id: { in: discrepancyIds },
+                receipt: {
+                  order: { organizationId: u.organizationId },
+                },
+              },
+              select: {
+                id: true,
+                receipt: {
+                  select: {
+                    order: {
+                      select: {
+                        destinationStockLocationId: true,
+                        destinationStockLocation: {
+                          select: { facilityId: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+          : [],
+        stocktakeIds.length
+          ? this.db.stocktake.findMany({
+              where: {
+                id: { in: stocktakeIds },
+                stockLocation: {
+                  facility: { organizationId: u.organizationId },
+                },
+              },
+              select: {
+                id: true,
+                stockLocationId: true,
+                createdById: true,
+                stockLocation: { select: { facilityId: true } },
+              },
+            })
+          : [],
+      ]);
 
     const allowed = new Set<string>();
     for (const resource of requests) {
@@ -294,6 +338,26 @@ export class InventoryService {
         })
       )
         allowed.add(`DamageReport:${resource.id}`);
+    }
+    for (const resource of discrepancies) {
+      const destination = resource.receipt.order.destinationStockLocation;
+      if (
+        this.scope.canAccess(u, "discrepancy.read", {
+          facilityId: destination.facilityId,
+          stockLocationId: resource.receipt.order.destinationStockLocationId,
+        })
+      )
+        allowed.add(`DiscrepancyCase:${resource.id}`);
+    }
+    for (const resource of stocktakes) {
+      if (
+        this.scope.canAccess(u, "stocktake.read", {
+          facilityId: resource.stockLocation.facilityId,
+          stockLocationId: resource.stockLocationId,
+          createdById: resource.createdById,
+        })
+      )
+        allowed.add(`Stocktake:${resource.id}`);
     }
 
     return notifications
@@ -429,6 +493,51 @@ export class InventoryService {
       if (
         !resource ||
         !this.scope.canAccess(u, "damage.read", {
+          facilityId: resource.stockLocation.facilityId,
+          stockLocationId: resource.stockLocationId,
+          createdById: resource.createdById,
+        })
+      )
+        this.notificationNotFound();
+      return;
+    }
+    if (type === "DiscrepancyCase") {
+      const resource = await this.db.discrepancyCase.findFirst({
+        where: {
+          id,
+          receipt: { order: { organizationId: u.organizationId } },
+        },
+        include: {
+          receipt: {
+            include: {
+              order: { include: { destinationStockLocation: true } },
+            },
+          },
+        },
+      });
+      const destination = resource?.receipt.order.destinationStockLocation;
+      if (
+        !resource ||
+        !destination ||
+        !this.scope.canAccess(u, "discrepancy.read", {
+          facilityId: destination.facilityId,
+          stockLocationId: resource.receipt.order.destinationStockLocationId,
+        })
+      )
+        this.notificationNotFound();
+      return;
+    }
+    if (type === "Stocktake") {
+      const resource = await this.db.stocktake.findFirst({
+        where: {
+          id,
+          stockLocation: { facility: { organizationId: u.organizationId } },
+        },
+        include: { stockLocation: true },
+      });
+      if (
+        !resource ||
+        !this.scope.canAccess(u, "stocktake.read", {
           facilityId: resource.stockLocation.facilityId,
           stockLocationId: resource.stockLocationId,
           createdById: resource.createdById,

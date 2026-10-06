@@ -50,6 +50,7 @@ openssl rand -hex 48
 - `CORS_ORIGINS` có thể đặt là `*` để chấp nhận mọi nguồn gọi tới API, hoặc điền cụ thể các domain (phân tách bởi dấu phẩy).
 - Không bật `DEMO_POLICY_ENABLED` hoặc Swagger ở production nếu không có nhu cầu rõ ràng.
 - Compose đặt `TRUST_PROXY_HOPS=1` vì API chỉ nhận traffic qua một reverse proxy trên VPS. Nếu kiến trúc có CDN/proxy bổ sung, chỉ tăng giá trị sau khi xác định chính xác chuỗi proxy.
+- Để bật push Android/iOS, thêm các biến `FCM_ENABLED=true`, `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, `FCM_PRIVATE_KEY` và `FCM_ANDROID_CHANNEL_ID` vào `.env.production`. Workflow CI giữ file này trên VPS, tự truyền các biến qua Compose ở mỗi lần deploy. Với iOS, cấu hình APNs authentication key trong Firebase Console; không lưu APNs key trực tiếp trong repository.
 
 ## 3. Reverse proxy và TLS
 

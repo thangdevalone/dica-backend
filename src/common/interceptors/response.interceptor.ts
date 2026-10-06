@@ -2,6 +2,7 @@ import {
   CallHandler,
   ExecutionContext,
   Injectable,
+  StreamableFile,
   NestInterceptor,
 } from "@nestjs/common";
 import type { Request } from "express";
@@ -17,6 +18,7 @@ export class ResponseInterceptor implements NestInterceptor {
     const req = context.switchToHttp().getRequest<Request>();
     return next.handle().pipe(
       map((body: unknown) => {
+        if (body instanceof StreamableFile) return body;
         const result: Result =
           body && typeof body === "object" && "data" in body
             ? (body as Result)

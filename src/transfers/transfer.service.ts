@@ -405,7 +405,7 @@ export class TransferService {
             afterData: { status: "APPROVED", order_id: order.id },
           },
         });
-        return tx.transfer.update({
+        const updated = await tx.transfer.update({
           where: { id },
           data: {
             status: TransferStatus.APPROVED,
@@ -414,6 +414,15 @@ export class TransferService {
             version: { increment: 1 },
           },
         });
+        await tx.outboxEvent.create({
+          data: {
+            type: "TRANSFER_APPROVED",
+            aggregateType: "Transfer",
+            aggregateId: id,
+            payload: { transfer_id: id, order_id: order.id },
+          },
+        });
+        return updated;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
@@ -485,6 +494,14 @@ export class TransferService {
             afterData: { status: "APPROVED", order_id: order.id },
           },
         });
+        await tx.outboxEvent.create({
+          data: {
+            type: "TRANSFER_APPROVED",
+            aggregateType: "Transfer",
+            aggregateId: id,
+            payload: { transfer_id: id, order_id: order.id },
+          },
+        });
         return {
           transfer_id: id,
           status: "APPROVED",
@@ -521,7 +538,7 @@ export class TransferService {
           note: dto.note,
         },
       });
-      return tx.transfer.update({
+      const updated = await tx.transfer.update({
         where: { id },
         data: {
           status: TransferStatus.REJECTED,
@@ -529,6 +546,15 @@ export class TransferService {
           version: { increment: 1 },
         },
       });
+      await tx.outboxEvent.create({
+        data: {
+          type: "TRANSFER_REJECTED",
+          aggregateType: "Transfer",
+          aggregateId: id,
+          payload: { transfer_id: id },
+        },
+      });
+      return updated;
     });
     return { data, message: "Từ chối điều chuyển thành công." };
   }
