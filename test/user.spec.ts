@@ -82,3 +82,111 @@ test("admin tạo tài khoản và role grant trong cùng transaction", async ()
   assert.equal(grantData?.scopeType, ScopeType.ORGANIZATION);
   assert.equal(result.data.grants.length, 1);
 });
+
+test("admin tạo vai trò tùy chỉnh với mã chuẩn hóa và bộ quyền đã kiểm tra", async () => {
+  const checkedPermissions: string[] = [];
+  const createdPermissions: Array<Record<string, unknown>> = [];
+  const roleActor: AuthUser = {
+    ...actor,
+    grants: [
+      {
+        id: "00000000-0000-4000-8000-000000000020",
+        roleCode: "ADMIN_OWNER",
+        permissions: ["role.manage", "request.read", "request.approve"],
+        scopeType: ScopeType.ORGANIZATION,
+        facilityId: null,
+        stockLocationId: null,
+        departmentId: null,
+      },
+    ],
+  };
+  const createdRole = {
+    id: "00000000-0000-4000-8000-000000000021",
+    organizationId: actor.organizationId,
+    code: "KITCHEN_MANAGER",
+    name: "Quản lý bếp",
+    system: false,
+    active: true,
+  };
+  const transactionClient = {
+    role: {
+      create: async ({ data }: { data: Record<string, unknown> }) => ({
+        ...createdRole,
+        ...data,
+      }),
+      findUniqueOrThrow: async () => ({
+        ...createdRole,
+        permissions: createdPermissions,
+      }),
+    },
+    rolePermission: {
+      createMany: async ({
+        data,
+      }: {
+        data: Array<Record<string, unknown>>;
+      }) => {
+        createdPermissions.push(...data);
+        return { count: data.length };
+      },
+    },
+  };
+  const database = {
+    role: { count: async () => 0 },
+    permission: {
+      findMany: async () => [
+        { code: "request.read" },
+        { code: "request.approve" },
+      ],
+    },
+    $transaction: async (work: (tx: typeof transactionClient) => unknown) =>
+      work(transactionClient),
+  };
+  const scope = {
+    assertAccess: (_actor: AuthUser, permission: string) =>
+      checkedPermissions.push(permission),
+  };
+  const service = new UserService(database as never, scope as never);
+
+  const result = await service.createRole(roleActor, {
+    code: "kitchen_manager",
+    name: "Quản lý bếp",
+    permission_codes: ["request.read", "request.approve"],
+  });
+
+  assert.deepEqual(checkedPermissions, ["role.manage"]);
+  assert.equal(result.data.code, "KITCHEN_MANAGER");
+  assert.deepEqual(
+    createdPermissions.map((item) => item.permissionCode),
+    ["request.read", "request.approve"],
+  );
+});
+
+test("admin không thể tạo vai trò chứa quyền cao hơn quyền đang có", async () => {
+  const roleActor: AuthUser = {
+    ...actor,
+    grants: [
+      {
+        id: "00000000-0000-4000-8000-000000000030",
+        roleCode: "LIMITED_ADMIN",
+        permissions: ["role.manage"],
+        scopeType: ScopeType.ORGANIZATION,
+        facilityId: null,
+        stockLocationId: null,
+        departmentId: null,
+      },
+    ],
+  };
+  const database = {
+    permission: { findMany: async () => [{ code: "backup.manage" }] },
+  };
+  const scope = { assertAccess: () => undefined };
+  const service = new UserService(database as never, scope as never);
+
+  await assert.rejects(() =>
+    service.createRole(roleActor, {
+      code: "BACKUP_ADMIN",
+      name: "Quản trị sao lưu",
+      permission_codes: ["backup.manage"],
+    }),
+  );
+});

@@ -16,9 +16,11 @@ import { PrismaService } from "../database/prisma.service.js";
 import { ScopeType, UserKind } from "../generated/prisma/client.js";
 import type {
   AssignGrantDto,
+  CreateRoleDto,
   CreateUserDto,
   GrantListQueryDto,
   ResetPasswordDto,
+  UpdateRoleDto,
   UpdateUserDto,
 } from "./user.dto.js";
 @Injectable()
@@ -292,7 +294,7 @@ export class UserService {
   }
   async roles(actor: AuthUser, q: PaginationDto) {
     this.scope.assertAccess(actor, "role.read", {});
-    const where = { organizationId: actor.organizationId, active: true };
+    const where = { organizationId: actor.organizationId };
     const { data, meta } = await paginateById(
       q,
       ({ skip, take, cursorId }) =>
@@ -307,6 +309,87 @@ export class UserService {
       () => this.db.role.count({ where }),
     );
     return { data, message: "Lấy danh sách vai trò thành công.", meta };
+  }
+  async createRole(actor: AuthUser, d: CreateRoleDto) {
+    this.scope.assertAccess(actor, "role.manage", {});
+    const code = d.code.trim().toUpperCase();
+    const name = d.name.trim();
+    const permissionCodes = [...new Set(d.permission_codes)];
+    await this.validatePermissionCodes(actor, permissionCodes);
+    if (
+      await this.db.role.count({
+        where: { organizationId: actor.organizationId, code },
+      })
+    )
+      this.invalid("Mã vai trò đã tồn tại trong tổ chức.");
+    const data = await this.db.$transaction(async (tx) => {
+      const role = await tx.role.create({
+        data: {
+          organizationId: actor.organizationId,
+          code,
+          name,
+          system: false,
+          active: true,
+        },
+      });
+      await tx.rolePermission.createMany({
+        data: permissionCodes.map((permissionCode) => ({
+          roleId: role.id,
+          permissionCode,
+        })),
+      });
+      return tx.role.findUniqueOrThrow({
+        where: { id: role.id },
+        include: { permissions: { include: { permission: true } } },
+      });
+    });
+    return { data, message: "Tạo vai trò tùy chỉnh thành công." };
+  }
+  async updateRole(actor: AuthUser, id: string, d: UpdateRoleDto) {
+    this.scope.assertAccess(actor, "role.manage", {});
+    if (
+      d.name === undefined &&
+      d.permission_codes === undefined &&
+      d.active === undefined
+    )
+      this.invalid("Cần gửi ít nhất một nội dung cần cập nhật.");
+    const role = await this.db.role.findFirst({
+      where: { id, organizationId: actor.organizationId },
+      include: { permissions: true },
+    });
+    if (!role) this.notFound();
+    if (role.system)
+      this.invalid(
+        "Vai trò hệ thống là mẫu bảo vệ và không thể chỉnh sửa. Hãy tạo vai trò tùy chỉnh.",
+      );
+    const permissionCodes = d.permission_codes
+      ? [...new Set(d.permission_codes)]
+      : undefined;
+    if (permissionCodes)
+      await this.validatePermissionCodes(actor, permissionCodes);
+    const data = await this.db.$transaction(async (tx) => {
+      await tx.role.update({
+        where: { id },
+        data: {
+          ...(d.name !== undefined ? { name: d.name.trim() } : {}),
+          ...(d.active !== undefined ? { active: d.active } : {}),
+        },
+      });
+      if (permissionCodes) {
+        await tx.rolePermission.deleteMany({ where: { roleId: id } });
+        await tx.rolePermission.createMany({
+          data: permissionCodes.map((permissionCode) => ({
+            roleId: id,
+            permissionCode,
+          })),
+        });
+      }
+      return tx.role.findUniqueOrThrow({
+        where: { id },
+        include: { permissions: { include: { permission: true } } },
+      });
+    });
+    return { data, message: "Cập nhật vai trò và bộ quyền thành công." };
   }
   async permissions(actor: AuthUser, q: PaginationDto) {
     this.scope.assertAccess(actor, "role.read", {});
@@ -549,6 +632,24 @@ export class UserService {
       }))
     )
       this.invalid("Bộ phận không thuộc cơ sở.");
+  }
+  private async validatePermissionCodes(actor: AuthUser, codes: string[]) {
+    const permissions = await this.db.permission.findMany({
+      where: { code: { in: codes } },
+      select: { code: true },
+    });
+    const existing = new Set(permissions.map((permission) => permission.code));
+    const unknown = codes.filter((code) => !existing.has(code));
+    if (unknown.length)
+      this.invalid(`Quyền không tồn tại: ${unknown.join(", ")}.`);
+    const actorPermissions = new Set(
+      actor.grants.flatMap((grant) => grant.permissions),
+    );
+    const excessive = codes.filter((code) => !actorPermissions.has(code));
+    if (excessive.length)
+      this.invalid(
+        `Không thể cấp quyền cao hơn quyền của tài khoản hiện tại: ${excessive.join(", ")}.`,
+      );
   }
   private invalid(m: string): never {
     throw new ApiException(

@@ -18,9 +18,11 @@ import { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   AssignGrantDto,
+  CreateRoleDto,
   CreateUserDto,
   GrantListQueryDto,
   ResetPasswordDto,
+  UpdateRoleDto,
   UpdateUserDto,
 } from "./user.dto.js";
 import { UserService } from "./user.service.js";
@@ -88,6 +90,24 @@ export class UserController {
   @RequirePermissions("role.read")
   roles(@CurrentUser() u: AuthUser, @Query() q: PaginationDto) {
     return this.s.roles(u, q);
+  }
+  @ApiEndpoint("Tạo vai trò tùy chỉnh và chọn bộ quyền", { adminWeb: true })
+  @Post("roles")
+  @RequirePermissions("role.manage")
+  createRole(@CurrentUser() u: AuthUser, @Body() d: CreateRoleDto) {
+    return this.s.createRole(u, d);
+  }
+  @ApiEndpoint("Cập nhật tên, trạng thái hoặc bộ quyền của vai trò tùy chỉnh", {
+    adminWeb: true,
+  })
+  @Patch("roles/:id")
+  @RequirePermissions("role.manage")
+  updateRole(
+    @CurrentUser() u: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() d: UpdateRoleDto,
+  ) {
+    return this.s.updateRole(u, id, d);
   }
   @ApiEndpoint("Xem danh mục quyền hệ thống", { adminWeb: true })
   @Get("permissions")

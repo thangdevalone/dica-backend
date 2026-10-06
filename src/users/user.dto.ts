@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -9,6 +13,70 @@ import {
 } from "class-validator";
 import { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ScopeType, UserKind } from "../generated/prisma/enums.js";
+
+export class CreateRoleDto {
+  @ApiProperty({
+    example: "KITCHEN_MANAGER",
+    minLength: 2,
+    maxLength: 80,
+    description: "Mã vai trò viết liền, chỉ gồm chữ, số và dấu gạch dưới.",
+  })
+  @IsString()
+  @Length(2, 80)
+  @Matches(/^[a-zA-Z][a-zA-Z0-9_]*$/, {
+    message:
+      "Mã vai trò chỉ gồm chữ, số, dấu gạch dưới và phải bắt đầu bằng chữ.",
+  })
+  code!: string;
+
+  @ApiProperty({ example: "Quản lý bếp", minLength: 2, maxLength: 150 })
+  @IsString()
+  @Length(2, 150)
+  name!: string;
+
+  @ApiProperty({
+    type: [String],
+    minItems: 1,
+    example: ["request.read", "request.approve", "stock.read"],
+    description: "Danh sách mã quyền lấy từ GET /permissions.",
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  permission_codes!: string[];
+}
+
+export class UpdateRoleDto {
+  @ApiPropertyOptional({ example: "Quản lý bếp", minLength: 2, maxLength: 150 })
+  @IsOptional()
+  @IsString()
+  @Length(2, 150)
+  name?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    minItems: 1,
+    example: ["request.read", "request.approve", "stock.read"],
+    description:
+      "Nếu gửi trường này, toàn bộ bộ quyền hiện tại sẽ được thay thế.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  permission_codes?: string[];
+
+  @ApiPropertyOptional({
+    example: true,
+    description: "Bật hoặc tắt vai trò tùy chỉnh.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
 export class GrantListQueryDto extends PaginationDto {
   @ApiPropertyOptional({ format: "uuid" })
   @IsOptional()
