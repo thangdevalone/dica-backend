@@ -7,7 +7,9 @@ import {
   IsBoolean,
   IsEnum,
   IsOptional,
+  IsString,
   IsUUID,
+  Matches,
   ValidateNested,
 } from "class-validator";
 import { PaginationDto } from "../common/dto/pagination.dto.js";
@@ -45,6 +47,17 @@ export class UpsertEligibilityDto {
   @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
   @IsUUID()
   ingredient_id!: string;
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: "25.5",
+    description:
+      "Số lượng tối đa cho mỗi dòng yêu cầu, tính theo đơn vị cơ sở của nguyên liệu; null để bỏ giới hạn.",
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,3})?$/)
+  max_quantity_per_request?: string | null;
   @ApiPropertyOptional({ example: true, default: true })
   @IsOptional()
   @IsBoolean()

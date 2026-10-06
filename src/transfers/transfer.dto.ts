@@ -5,6 +5,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsEnum,
+  IsISO8601,
   IsInt,
   IsOptional,
   IsString,
@@ -55,6 +56,16 @@ export class CreateTransferDto {
   @ApiProperty({ format: "uuid", description: "Mã kho nhận" })
   @IsUUID()
   to_stock_location_id!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    format: "date-time",
+    example: "2026-10-06T10:30:00+07:00",
+    description: "Thời gian dự kiến hàng đến kho nhận.",
+  })
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  expected_arrival_at?: string;
 
   @ApiPropertyOptional({
     example: "Chuyển bổ sung nguyên liệu",

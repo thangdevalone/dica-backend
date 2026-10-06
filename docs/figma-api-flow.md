@@ -34,7 +34,7 @@ flowchart LR
 ### 1. Xin hàng từ Bếp/Bàn/Chi nhánh
 
 1. Web cấu hình cơ sở, kho, bộ phận, quyền, nguyên liệu được phép xin và nguồn cấp.
-2. Mobile/Web lấy `item-eligibility` theo cơ sở + bộ phận; người dùng chỉ chọn được nguyên liệu hợp lệ.
+2. Mobile/Web lấy `item-eligibility` theo cơ sở + bộ phận; người dùng chỉ chọn được nguyên liệu hợp lệ và không vượt `maxQuantityPerRequest` sau khi quy đổi về đơn vị cơ sở.
 3. Người dùng tạo `DRAFT`, có thể sửa, sau đó `submit`.
 4. Backend chụp snapshot quy đổi và source rule tại thời điểm gửi.
 5. Quản lý tổng duyệt trên Web. Backend tách một yêu cầu thành các đơn kho/NCC theo nguồn, không để client tự quyết định nguồn.

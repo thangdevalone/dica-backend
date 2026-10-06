@@ -178,6 +178,9 @@ export class TransferService {
         fromStockLocationId: from.id,
         toStockLocationId: to.id,
         createdById: user.id,
+        ...(dto.expected_arrival_at
+          ? { expectedArrivalAt: new Date(dto.expected_arrival_at) }
+          : {}),
         ...(dto.note ? { note: dto.note } : {}),
         lines: { create: lines },
       },
@@ -249,6 +252,9 @@ export class TransferService {
           data: {
             fromStockLocationId: from.id,
             toStockLocationId: to.id,
+            expectedArrivalAt: dto.expected_arrival_at
+              ? new Date(dto.expected_arrival_at)
+              : null,
             note: dto.note ?? null,
             version: { increment: 1 },
           },

@@ -62,3 +62,25 @@ test("mọi $ref trong response schema đều trỏ tới component tồn tại"
   );
   for (const match of refs) assert.ok(names.has(match[1]!), match[1]);
 });
+
+test("response schema có hạn mức gọi hàng và ETA điều chuyển đúng type", () => {
+  const eligibility = DICA_RESPONSE_SCHEMAS.ItemEligibility as {
+    properties: Record<string, unknown>;
+  };
+  const transfer = DICA_RESPONSE_SCHEMAS.Transfer as {
+    properties: Record<string, unknown>;
+  };
+
+  assert.deepEqual(eligibility.properties.maxQuantityPerRequest, {
+    type: "string",
+    pattern: "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+    example: "5.5",
+    description: "Số thập phân được serialize dưới dạng chuỗi.",
+    nullable: true,
+  });
+  assert.deepEqual(transfer.properties.expectedArrivalAt, {
+    type: "string",
+    format: "date-time",
+    nullable: true,
+  });
+});

@@ -9,7 +9,7 @@ import {
   paginateById,
 } from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
-import { SourceType, type Prisma } from "../generated/prisma/client.js";
+import { Prisma, SourceType } from "../generated/prisma/client.js";
 import type {
   BulkSourceRuleDto,
   EligibilityListQueryDto,
@@ -115,6 +115,13 @@ export class SourcingService {
     ]);
     if (!dep || !item)
       this.invalid("Cơ sở, bộ phận hoặc nguyên liệu không hợp lệ.");
+    const maxQuantity =
+      d.max_quantity_per_request === null ||
+      d.max_quantity_per_request === undefined
+        ? d.max_quantity_per_request
+        : new Prisma.Decimal(d.max_quantity_per_request);
+    if (maxQuantity instanceof Prisma.Decimal && !maxQuantity.gt(0))
+      this.invalid("Giới hạn số lượng gọi phải lớn hơn 0.");
     const data = await this.db.itemEligibility.upsert({
       where: {
         facilityId_departmentId_ingredientId: {
@@ -127,9 +134,17 @@ export class SourcingService {
         facilityId: d.facility_id,
         departmentId: d.department_id,
         ingredientId: d.ingredient_id,
+        ...(maxQuantity !== undefined
+          ? { maxQuantityPerRequest: maxQuantity }
+          : {}),
         active: d.active ?? true,
       },
-      update: { active: d.active ?? true },
+      update: {
+        ...(maxQuantity !== undefined
+          ? { maxQuantityPerRequest: maxQuantity }
+          : {}),
+        active: d.active ?? true,
+      },
     });
     return { data, message: "Cập nhật quyền xin hàng thành công." };
   }

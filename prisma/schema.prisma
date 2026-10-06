@@ -493,14 +493,15 @@ model SupplierIngredient {
 }
 
 model ItemEligibility {
-  id           String     @id @default(uuid()) @db.Uuid
-  facilityId   String     @map("facility_id") @db.Uuid
-  departmentId String     @map("department_id") @db.Uuid
-  ingredientId String     @map("ingredient_id") @db.Uuid
-  active       Boolean    @default(true)
-  facility     Facility   @relation(fields: [facilityId], references: [id])
-  department   Department @relation(fields: [departmentId], references: [id])
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  id                    String     @id @default(uuid()) @db.Uuid
+  facilityId            String     @map("facility_id") @db.Uuid
+  departmentId          String     @map("department_id") @db.Uuid
+  ingredientId          String     @map("ingredient_id") @db.Uuid
+  maxQuantityPerRequest Decimal?   @map("max_quantity_per_request") @db.Decimal(20, 3)
+  active                Boolean    @default(true)
+  facility              Facility   @relation(fields: [facilityId], references: [id])
+  department            Department @relation(fields: [departmentId], references: [id])
+  ingredient            Ingredient @relation(fields: [ingredientId], references: [id])
 
   @@unique([facilityId, departmentId, ingredientId])
   @@map("item_eligibilities")
@@ -582,6 +583,7 @@ model Transfer {
   status              TransferStatus          @default(DRAFT)
   version             Int                     @default(1)
   note                String?                 @db.VarChar(1000)
+  expectedArrivalAt   DateTime?               @map("expected_arrival_at")
   submittedAt         DateTime?               @map("submitted_at")
   decidedAt           DateTime?               @map("decided_at")
   createdAt           DateTime                @default(now()) @map("created_at")

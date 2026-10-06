@@ -769,11 +769,27 @@ export class RequestService {
           : conversionByPair.get(`${line.ingredient_id}:${line.unit_id}`)
               ?.factorToBase;
       if (!factor) this.invalid("Chưa có quy đổi cho đơn vị đã chọn.");
+      const baseQuantity = new Prisma.Decimal(line.quantity).mul(factor);
+      if (
+        eligibility.maxQuantityPerRequest &&
+        baseQuantity.gt(eligibility.maxQuantityPerRequest)
+      )
+        throw new ApiException(
+          ErrorCode.VALIDATION_ERROR,
+          "Số lượng yêu cầu vượt giới hạn đã cấu hình.",
+          HttpStatus.UNPROCESSABLE_ENTITY,
+          {
+            ingredient_id: line.ingredient_id,
+            max_quantity_per_request:
+              eligibility.maxQuantityPerRequest.toString(),
+            base_unit_id: eligibility.ingredient.baseUnitId,
+          },
+        );
       return {
         ingredientId: line.ingredient_id,
         requestedUnitId: line.unit_id,
         requestedQuantity: line.quantity,
-        baseQuantity: new Prisma.Decimal(line.quantity).mul(factor),
+        baseQuantity,
         ingredientNameSnapshot: eligibility.ingredient.name,
         unitCodeSnapshot: unit.code,
         conversionFactorSnapshot: factor,

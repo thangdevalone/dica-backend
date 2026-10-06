@@ -100,6 +100,8 @@ Mobile **không gọi** API cấu hình user/role/cơ sở/danh mục/nguồn, d
 
 Chỉ hiển thị dòng `active=true`. Danh sách hợp lệ là giao của eligibility, quyền/scope tài khoản và nguyên liệu đang active. Mobile không gửi supplier hoặc kho nguồn trong request.
 
+Nếu `maxQuantityPerRequest` khác `null`, đây là hạn mức cho một dòng yêu cầu tính theo `ingredient.baseUnit`. Mobile nên hiển thị hạn mức cạnh nguyên liệu và kiểm tra sớm; backend vẫn quy đổi đơn vị rồi kiểm tra lại khi tạo/sửa phiếu.
+
 ### Bước B — tạo bản nháp
 
 `POST /requests`
@@ -200,6 +202,7 @@ Nếu hàng bị hỏng và bị từ chối ngay tại điểm nhận, `quantit
 {
   "from_stock_location_id": "<source-location-uuid>",
   "to_stock_location_id": "<destination-location-uuid>",
+  "expected_arrival_at": "2026-10-06T10:30:00+07:00",
   "note": "Bổ sung hàng cho ca tối",
   "lines": [
     {
@@ -211,7 +214,9 @@ Nếu hàng bị hỏng và bị từ chối ngay tại điểm nhận, `quantit
 }
 ```
 
-Sửa draft bằng `PUT /transfers/{id}`; gửi lại body tạo phiếu (`from_stock_location_id`, `to_stock_location_id`, `note`, `lines`) và thêm `expected_version`. Gửi bằng:
+`expected_arrival_at` là tùy chọn, dùng ISO-8601 có múi giờ. Mobile hiển thị trường này để cơ sở nhận chuẩn bị kiểm hàng.
+
+Sửa draft bằng `PUT /transfers/{id}`; gửi lại body tạo phiếu (`from_stock_location_id`, `to_stock_location_id`, `expected_arrival_at`, `note`, `lines`) và thêm `expected_version`. Gửi bằng:
 
 ```http
 POST /transfers/{id}/submit
