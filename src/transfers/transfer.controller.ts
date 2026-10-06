@@ -90,7 +90,9 @@ export class TransferController {
   }
 
   @Post(":id/approve")
-  @ApiEndpoint("Duyệt và ghi nhận phiếu điều chuyển", { audience: "both" })
+  @ApiEndpoint("Duyệt và ghi nhận phiếu điều chuyển", {
+    audience: "admin-web",
+  })
   @RequirePermissions("transfer.approve")
   approve(
     @CurrentUser() user: AuthUser,
@@ -102,7 +104,7 @@ export class TransferController {
   }
 
   @Post(":id/reject")
-  @ApiEndpoint("Từ chối phiếu điều chuyển", { audience: "both" })
+  @ApiEndpoint("Từ chối phiếu điều chuyển", { audience: "admin-web" })
   @RequirePermissions("transfer.reject")
   reject(
     @CurrentUser() user: AuthUser,

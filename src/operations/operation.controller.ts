@@ -159,7 +159,7 @@ export class OperationController {
   }
 
   @Post("damage-reports/:id/submit")
-  @ApiEndpoint("Gửi phiếu báo hỏng để xác nhận", { audience: "mobile" })
+  @ApiEndpoint("Gửi phiếu báo hỏng để xác nhận", { audience: "both" })
   @RequirePermissions("damage.submit")
   submitDamage(
     @CurrentUser() user: AuthUser,

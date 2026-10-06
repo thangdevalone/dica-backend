@@ -1,6 +1,6 @@
 # DICA Backend
 
-Backend NestJS dạng modular monolith cho web quản trị và ứng dụng DICA. API dùng REST tại `/api/v1`, tài liệu OpenAPI tại `/docs` và `/openapi.json`.
+Backend NestJS dạng modular monolith cho web quản trị và ứng dụng DICA. API dùng REST tại `/api/v1`, tài liệu OpenAPI tại `/docs` và `/openapi.json`. OpenAPI có request/response/error schema đầy đủ cùng metadata phân loại Mobile/Admin Web để sinh client.
 
 ## Thành phần đã triển khai
 
@@ -20,6 +20,8 @@ Backend NestJS dạng modular monolith cho web quản trị và ứng dụng DIC
 - Mọi API danh sách đều phân trang mặc định; hỗ trợ offset đầy đủ metadata và cursor không `COUNT(*)` cho dữ liệu lớn.
 
 Trạng thái toàn bộ scope và các blocker OPEN được ghi tại [docs/module-status.md](docs/module-status.md). Các module chưa hoàn thiện không có endpoint giả trả thành công.
+
+Flow Web/Mobile đã đối chiếu từ Figma được ghi tại [docs/figma-api-flow.md](docs/figma-api-flow.md). Tài liệu bàn giao riêng cho mobile dev nằm tại [docs/mobile-integration.md](docs/mobile-integration.md).
 
 ## Chạy local
 

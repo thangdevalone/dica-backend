@@ -100,7 +100,9 @@ export class RequestController {
   ) {
     return this.s.submit(u, id, d);
   }
-  @ApiEndpoint("Duyệt yêu cầu và sinh đơn thực hiện", { audience: "both" })
+  @ApiEndpoint("Duyệt yêu cầu và sinh đơn thực hiện", {
+    audience: "admin-web",
+  })
   @Post(":id/approve")
   @RequirePermissions("request.approve")
   approve(
@@ -111,7 +113,7 @@ export class RequestController {
   ) {
     return this.s.approve(u, id, d, k);
   }
-  @ApiEndpoint("Từ chối yêu cầu hàng", { audience: "both" })
+  @ApiEndpoint("Từ chối yêu cầu hàng", { audience: "admin-web" })
   @Post(":id/reject")
   @RequirePermissions("request.reject")
   reject(

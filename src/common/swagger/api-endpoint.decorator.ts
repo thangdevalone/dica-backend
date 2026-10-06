@@ -1,5 +1,5 @@
 import { applyDecorators } from "@nestjs/common";
-import { ApiBody, ApiOperation } from "@nestjs/swagger";
+import { ApiBody, ApiExtension, ApiOperation } from "@nestjs/swagger";
 
 export type ApiAudience = "mobile" | "admin-web" | "both" | "system";
 
@@ -18,16 +18,18 @@ const AUDIENCE_DOC: Record<
 > = {
   mobile: {
     label: "MOBILE",
-    description: "Đối tượng tích hợp: ứng dụng Mobile DICA.",
+    description:
+      "Luồng tích hợp: ứng dụng Mobile DICA. Admin Web không cần gọi endpoint này.",
   },
   "admin-web": {
     label: "ADMIN WEB",
-    description: "Đối tượng tích hợp: trang quản trị Web DICA.",
+    description:
+      "Luồng tích hợp: trang quản trị Web DICA. Mobile không cần gọi endpoint này.",
   },
   both: {
     label: "MOBILE + ADMIN WEB",
     description:
-      "Đối tượng tích hợp: dùng chung cho ứng dụng Mobile và trang quản trị Web DICA.",
+      "Luồng tích hợp dùng chung: ứng dụng Mobile DICA và trang quản trị Web DICA đều có thể gọi endpoint này theo quyền được cấp.",
   },
   system: {
     label: "SYSTEM",
@@ -62,6 +64,13 @@ export function ApiEndpoint(
       description: [audience.description, bodyDescription]
         .filter(Boolean)
         .join("\n\n"),
+    }),
+    ApiExtension("x-dica-audience", {
+      value: options.audience ?? inferredAudience,
+      clients:
+        (options.audience ?? inferredAudience) === "both"
+          ? ["mobile", "admin-web"]
+          : [options.audience ?? inferredAudience],
     }),
     ...(options.emptyBody
       ? [

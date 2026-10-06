@@ -10,6 +10,7 @@ import { AppModule } from "./app.module.js";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter.js";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor.js";
 import { requestIdMiddleware } from "./common/middleware/request-id.middleware.js";
+import { enhanceOpenApiDocument } from "./common/swagger/openapi-response.js";
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
       bufferLogs: true,
@@ -57,7 +58,11 @@ async function bootstrap(): Promise<void> {
     const docs = new DocumentBuilder()
       .setTitle("DICA Backend API")
       .setDescription(
-        "API quản lý nguồn cấp, yêu cầu hàng, giao nhận và tồn kho DICA.",
+        [
+          "API quản lý nguồn cấp, yêu cầu hàng, giao nhận và tồn kho DICA.",
+          "Mỗi endpoint có nhãn tích hợp trong tiêu đề: `[MOBILE]`, `[ADMIN WEB]`, `[MOBILE + ADMIN WEB]` hoặc `[SYSTEM]`.",
+          "Các thao tác POST/PUT/PATCH hiển thị schema body; mọi operation có success/error response envelope, data schema, enum và pagination type để sinh client.",
+        ].join("\n\n"),
       )
       .setVersion("1.0")
       .addBearerAuth()
@@ -69,7 +74,7 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup(
       "docs",
       app,
-      () => SwaggerModule.createDocument(app, docs),
+      () => enhanceOpenApiDocument(SwaggerModule.createDocument(app, docs)),
       { jsonDocumentUrl: "openapi.json" },
     );
   }
