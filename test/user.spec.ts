@@ -190,3 +190,115 @@ test("admin không thể tạo vai trò chứa quyền cao hơn quyền đang c�
     }),
   );
 });
+
+test("ADMIN_OWNER được chỉnh bộ quyền vai trò gốc nhưng không được đổi tên", async () => {
+  const owner: AuthUser = {
+    ...actor,
+    grants: [
+      {
+        id: "00000000-0000-4000-8000-000000000040",
+        roleCode: "ADMIN_OWNER",
+        permissions: ["role.manage"],
+        scopeType: ScopeType.ORGANIZATION,
+        facilityId: null,
+        stockLocationId: null,
+        departmentId: null,
+      },
+    ],
+  };
+  const role = {
+    id: "00000000-0000-4000-8000-000000000041",
+    organizationId: actor.organizationId,
+    code: "BRANCH_MANAGER",
+    name: "Quản lý chi nhánh",
+    system: true,
+    active: true,
+    permissions: [],
+  };
+  const savedPermissions: Array<Record<string, unknown>> = [];
+  const transactionClient = {
+    role: {
+      update: async () => role,
+      findUniqueOrThrow: async () => ({
+        ...role,
+        permissions: savedPermissions,
+      }),
+    },
+    rolePermission: {
+      deleteMany: async () => ({ count: 1 }),
+      createMany: async ({
+        data,
+      }: {
+        data: Array<Record<string, unknown>>;
+      }) => {
+        savedPermissions.push(...data);
+        return { count: data.length };
+      },
+    },
+  };
+  const database = {
+    role: { findFirst: async () => role },
+    permission: { findMany: async () => [{ code: "request.approve" }] },
+    $transaction: async (work: (tx: typeof transactionClient) => unknown) =>
+      work(transactionClient),
+  };
+  const service = new UserService(
+    database as never,
+    {
+      assertAccess: () => undefined,
+    } as never,
+  );
+
+  const result = await service.updateRole(owner, role.id, {
+    permission_codes: ["request.approve"],
+  });
+  assert.equal(result.data.permissions.length, 1);
+  await assert.rejects(() =>
+    service.updateRole(owner, role.id, {
+      name: "Tên mới",
+    }),
+  );
+});
+
+test("không cho bỏ quyền quản trị cốt lõi khỏi ADMIN_OWNER", async () => {
+  const owner: AuthUser = {
+    ...actor,
+    grants: [
+      {
+        id: "00000000-0000-4000-8000-000000000050",
+        roleCode: "ADMIN_OWNER",
+        permissions: ["role.manage"],
+        scopeType: ScopeType.ORGANIZATION,
+        facilityId: null,
+        stockLocationId: null,
+        departmentId: null,
+      },
+    ],
+  };
+  const database = {
+    role: {
+      findFirst: async () => ({
+        id: "00000000-0000-4000-8000-000000000051",
+        organizationId: actor.organizationId,
+        code: "ADMIN_OWNER",
+        name: "Quản trị hệ thống",
+        system: true,
+        active: true,
+        permissions: [],
+      }),
+    },
+    permission: { findMany: async () => [{ code: "dashboard.read" }] },
+  };
+  const service = new UserService(
+    database as never,
+    {
+      assertAccess: () => undefined,
+    } as never,
+  );
+
+  await assert.rejects(() =>
+    service.updateRole(owner, "00000000-0000-4000-8000-000000000051", {
+      permission_codes: ["dashboard.read"],
+    }),
+  );
+});

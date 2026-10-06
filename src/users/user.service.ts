@@ -23,6 +23,16 @@ import type {
   UpdateRoleDto,
   UpdateUserDto,
 } from "./user.dto.js";
+
+const ADMIN_OWNER_REQUIRED_PERMISSIONS = [
+  "user.read",
+  "role.read",
+  "role.manage",
+  "grant.read",
+  "grant.assign",
+  "grant.revoke",
+] as const;
+
 @Injectable()
 export class UserService {
   constructor(
@@ -358,15 +368,25 @@ export class UserService {
       include: { permissions: true },
     });
     if (!role) this.notFound();
-    if (role.system)
+    if (role.system && (d.name !== undefined || d.active !== undefined))
       this.invalid(
-        "Vai trò hệ thống là mẫu bảo vệ và không thể chỉnh sửa. Hãy tạo vai trò tùy chỉnh.",
+        "Vai trò hệ thống chỉ cho phép chỉnh bộ quyền; không thể đổi tên hoặc trạng thái.",
       );
     const permissionCodes = d.permission_codes
       ? [...new Set(d.permission_codes)]
       : undefined;
     if (permissionCodes)
       await this.validatePermissionCodes(actor, permissionCodes);
+    if (role.code === "ADMIN_OWNER" && permissionCodes) {
+      const selected = new Set(permissionCodes);
+      const missing = ADMIN_OWNER_REQUIRED_PERMISSIONS.filter(
+        (permission) => !selected.has(permission),
+      );
+      if (missing.length)
+        this.invalid(
+          `Vai trò Quản trị hệ thống bắt buộc giữ các quyền: ${missing.join(", ")}.`,
+        );
+    }
     const data = await this.db.$transaction(async (tx) => {
       await tx.role.update({
         where: { id },
@@ -642,6 +662,7 @@ export class UserService {
     const unknown = codes.filter((code) => !existing.has(code));
     if (unknown.length)
       this.invalid(`Quyền không tồn tại: ${unknown.join(", ")}.`);
+    if (actor.grants.some((grant) => grant.roleCode === "ADMIN_OWNER")) return;
     const actorPermissions = new Set(
       actor.grants.flatMap((grant) => grant.permissions),
     );

@@ -97,7 +97,7 @@ export class UserController {
   createRole(@CurrentUser() u: AuthUser, @Body() d: CreateRoleDto) {
     return this.s.createRole(u, d);
   }
-  @ApiEndpoint("Cập nhật tên, trạng thái hoặc bộ quyền của vai trò tùy chỉnh", {
+  @ApiEndpoint("Cập nhật vai trò tùy chỉnh hoặc bộ quyền của vai trò gốc", {
     adminWeb: true,
   })
   @Patch("roles/:id")

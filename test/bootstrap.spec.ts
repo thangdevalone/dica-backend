@@ -54,13 +54,16 @@ test("nâng version role không tạo lại hoặc đổi mật khẩu admin hi�
     },
     permission: { upsert: async () => ({}) },
     role: {
+      findMany: async () =>
+        Object.keys(SYSTEM_ROLE_PERMISSIONS).map((code) => ({ code })),
       upsert: async ({ create }: { create: { code: string } }) => ({
         id: `role-${create.code}`,
       }),
     },
     rolePermission: {
-      deleteMany: async () => ({}),
-      createMany: async () => ({}),
+      createMany: async () => {
+        throw new Error("Không được ghi đè bộ quyền vai trò gốc đã tồn tại.");
+      },
     },
     user: {
       create: async () => {

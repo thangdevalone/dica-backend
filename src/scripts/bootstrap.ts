@@ -99,6 +99,16 @@ export async function bootstrapProduction(
       }
 
       const roleIds: Record<string, string> = {};
+      const existingSystemRoles = await tx.role.findMany({
+        where: {
+          organizationId: organization.id,
+          code: { in: Object.keys(SYSTEM_ROLE_PERMISSIONS) },
+        },
+        select: { code: true },
+      });
+      const existingSystemRoleCodes = new Set(
+        existingSystemRoles.map((role) => role.code),
+      );
       for (const [code, permissionCodes] of Object.entries(
         SYSTEM_ROLE_PERMISSIONS,
       )) {
@@ -120,14 +130,15 @@ export async function bootstrapProduction(
           },
         });
         roleIds[code] = role.id;
-        await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
-        await tx.rolePermission.createMany({
-          data: permissionCodes.map((permissionCode) => ({
-            roleId: role.id,
-            permissionCode,
-          })),
-          skipDuplicates: true,
-        });
+        if (!existingSystemRoleCodes.has(code)) {
+          await tx.rolePermission.createMany({
+            data: permissionCodes.map((permissionCode) => ({
+              roleId: role.id,
+              permissionCode,
+            })),
+            skipDuplicates: true,
+          });
+        }
       }
 
       const admin = existingAdmin

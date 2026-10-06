@@ -70,7 +70,8 @@ export class UpdateRoleDto {
 
   @ApiPropertyOptional({
     example: true,
-    description: "Bật hoặc tắt vai trò tùy chỉnh.",
+    description:
+      "Bật hoặc tắt vai trò tùy chỉnh; không áp dụng cho vai trò gốc.",
   })
   @IsOptional()
   @IsBoolean()
