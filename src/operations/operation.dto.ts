@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -57,24 +57,33 @@ export class DamageListQueryDto extends OperationListQueryDto {
 }
 
 export class CountLineDto {
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
   @IsUUID()
   ingredient_id!: string;
 
+  @ApiProperty({
+    example: "12.5",
+    description: "Số lượng thực tế dạng chuỗi thập phân",
+  })
   @IsString()
   @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/)
   counted_quantity!: string;
 }
 
 export class CreateStocktakeDto {
+  @ApiProperty({ format: "uuid", description: "Mã kho kiểm kê" })
   @IsUUID()
   stock_location_id!: string;
 
+  @ApiProperty({ example: "2026-10-06", format: "date" })
   @IsDateString()
   business_date!: string;
 
+  @ApiProperty({ example: "2026-10-06T23:59:59+07:00", format: "date-time" })
   @IsISO8601()
   cutoff_at!: string;
 
+  @ApiProperty({ type: () => [CountLineDto], minItems: 1, maxItems: 500 })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(500)
@@ -84,50 +93,82 @@ export class CreateStocktakeDto {
 }
 
 export class VersionDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;
 }
 
 export class UpdateStocktakeDto extends CreateStocktakeDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;
 }
 
 export class CreateAdjustmentDto {
+  @ApiProperty({ format: "uuid", description: "Mã kho cần điều chỉnh" })
   @IsUUID()
   stock_location_id!: string;
 
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
   @IsUUID()
   ingredient_id!: string;
 
+  @ApiProperty({
+    example: "-2.5",
+    description: "Số lượng tăng/giảm dạng chuỗi; âm là giảm",
+  })
   @IsString()
   @Matches(/^-?(?:0|[1-9]\d*)(?:\.\d{1,3})?$/)
   quantity!: string;
 
+  @ApiProperty({
+    example: "Điều chỉnh theo kết quả kiểm tra",
+    minLength: 3,
+    maxLength: 1000,
+  })
   @IsString()
   @Length(3, 1000)
   reason!: string;
 
+  @ApiPropertyOptional({ example: "MANUAL", maxLength: 50 })
   @IsOptional()
   @IsString()
   @Length(1, 50)
   source_type?: string;
 
+  @ApiPropertyOptional({
+    format: "uuid",
+    description: "Mã chứng từ nguồn nếu có",
+  })
   @IsOptional()
   @IsUUID()
   source_id?: string;
 }
 
 export class DamageLineDto {
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu hỏng" })
   @IsUUID()
   ingredient_id!: string;
 
+  @ApiProperty({
+    example: "3.5",
+    description: "Số lượng hỏng dạng chuỗi thập phân",
+  })
   @IsString()
   @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/)
   quantity!: string;
 
+  @ApiPropertyOptional({ example: "Hết hạn sử dụng", maxLength: 1000 })
   @IsOptional()
   @IsString()
   @Length(0, 1000)
@@ -135,13 +176,20 @@ export class DamageLineDto {
 }
 
 export class CreateDamageDto {
+  @ApiProperty({ format: "uuid", description: "Mã kho phát sinh hàng hỏng" })
   @IsUUID()
   stock_location_id!: string;
 
+  @ApiProperty({
+    example: "Hàng hỏng trong quá trình bảo quản",
+    minLength: 3,
+    maxLength: 1000,
+  })
   @IsString()
   @Length(3, 1000)
   reason!: string;
 
+  @ApiProperty({ type: () => [DamageLineDto], minItems: 1, maxItems: 100 })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
@@ -151,6 +199,11 @@ export class CreateDamageDto {
 }
 
 export class UpdateDamageDto extends CreateDamageDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;

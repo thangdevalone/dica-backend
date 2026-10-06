@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -28,15 +28,40 @@ export class RequestListQueryDto extends PaginationDto {
   facility_id?: string;
 }
 export class CreateRequestLineDto {
-  @IsUUID() ingredient_id!: string;
-  @IsUUID() unit_id!: string;
-  @IsString() @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/) quantity!: string;
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
+  @IsUUID()
+  ingredient_id!: string;
+  @ApiProperty({ format: "uuid", description: "Mã đơn vị tính" })
+  @IsUUID()
+  unit_id!: string;
+  @ApiProperty({
+    example: "10.5",
+    description: "Số lượng dạng chuỗi thập phân",
+  })
+  @IsString()
+  @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/)
+  quantity!: string;
 }
 export class CreateRequestDto {
-  @IsUUID() facility_id!: string;
-  @IsUUID() department_id!: string;
-  @IsDateString() required_date!: string;
-  @IsOptional() @IsString() @Length(0, 1000) note?: string;
+  @ApiProperty({ format: "uuid", description: "Mã cơ sở nhận hàng" })
+  @IsUUID()
+  facility_id!: string;
+  @ApiProperty({ format: "uuid", description: "Mã bộ phận yêu cầu" })
+  @IsUUID()
+  department_id!: string;
+  @ApiProperty({ example: "2026-10-10", format: "date" })
+  @IsDateString()
+  required_date!: string;
+  @ApiPropertyOptional({ example: "Giao trước 10 giờ", maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @Length(0, 1000)
+  note?: string;
+  @ApiProperty({
+    type: () => [CreateRequestLineDto],
+    minItems: 1,
+    maxItems: 100,
+  })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
@@ -45,19 +70,45 @@ export class CreateRequestDto {
   lines!: CreateRequestLineDto[];
 }
 export class VersionCommandDto {
-  @IsInt() @Min(1) expected_version!: number;
-  @IsOptional() @IsString() @Length(0, 1000) note?: string;
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
+  @IsInt()
+  @Min(1)
+  expected_version!: number;
+  @ApiPropertyOptional({ example: "Ghi chú thao tác", maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @Length(0, 1000)
+  note?: string;
 }
 export class RejectRequestDto extends VersionCommandDto {
-  @IsString() @Length(3, 1000) declare note: string;
+  @ApiProperty({
+    example: "Số lượng vượt nhu cầu",
+    minLength: 3,
+    maxLength: 1000,
+  })
+  @IsString()
+  @Length(3, 1000)
+  declare note: string;
 }
 
 export class UpdateRequestDto extends CreateRequestDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;
 }
 
 export class CancelRequestDto extends VersionCommandDto {
-  @IsString() @Length(3, 1000) declare note: string;
+  @ApiProperty({ example: "Không còn nhu cầu", minLength: 3, maxLength: 1000 })
+  @IsString()
+  @Length(3, 1000)
+  declare note: string;
 }

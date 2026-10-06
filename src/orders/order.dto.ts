@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsIn,
   IsInt,
@@ -37,10 +37,20 @@ export class OrderListQueryDto extends PaginationDto {
 }
 
 export class CloseOutstandingDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;
 
+  @ApiProperty({
+    example: "Nhà cung cấp không thể giao phần còn lại",
+    minLength: 3,
+    maxLength: 1000,
+  })
   @IsString()
   @Length(3, 1000)
   reason!: string;

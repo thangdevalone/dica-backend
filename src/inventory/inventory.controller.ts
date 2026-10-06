@@ -10,6 +10,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
+import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   InventoryListQueryDto,
   LedgerListQueryDto,
@@ -21,19 +22,20 @@ import { InventoryService } from "./inventory.service.js";
 @Controller()
 export class InventoryController {
   constructor(private s: InventoryService) {}
-  @Get("stock-balances") @RequirePermissions("stock.read") balances(
-    @CurrentUser() u: AuthUser,
-    @Query() q: InventoryListQueryDto,
-  ) {
+  @ApiEndpoint("Xem số dư tồn kho hiện tại", { audience: "both" })
+  @Get("stock-balances")
+  @RequirePermissions("stock.read")
+  balances(@CurrentUser() u: AuthUser, @Query() q: InventoryListQueryDto) {
     return this.s.balances(u, q);
   }
-  @Get("stock-ledger") @RequirePermissions("stock_ledger.read") ledger(
-    @CurrentUser() u: AuthUser,
-    @Query() q: LedgerListQueryDto,
-  ) {
+  @ApiEndpoint("Xem lịch sử bút toán nhập xuất tồn", { audience: "both" })
+  @Get("stock-ledger")
+  @RequirePermissions("stock_ledger.read")
+  ledger(@CurrentUser() u: AuthUser, @Query() q: LedgerListQueryDto) {
     return this.s.ledger(u, q);
   }
   @Get("notifications")
+  @ApiEndpoint("Xem danh sách thông báo của tài khoản", { audience: "both" })
   @RequirePermissions("notification.read_own")
   notifications(
     @CurrentUser() u: AuthUser,
@@ -43,12 +45,17 @@ export class InventoryController {
   }
 
   @Post("notifications/read-all")
+  @ApiEndpoint("Đánh dấu toàn bộ thông báo là đã đọc", {
+    audience: "both",
+    emptyBody: true,
+  })
   @RequirePermissions("notification.mark_own")
   markAllNotificationsRead(@CurrentUser() u: AuthUser) {
     return this.s.markAllNotificationsRead(u);
   }
 
   @Get("notifications/:id")
+  @ApiEndpoint("Xem chi tiết một thông báo", { audience: "both" })
   @RequirePermissions("notification.read_own")
   notification(
     @CurrentUser() u: AuthUser,
@@ -58,6 +65,10 @@ export class InventoryController {
   }
 
   @Post("notifications/:id/read")
+  @ApiEndpoint("Đánh dấu một thông báo là đã đọc", {
+    audience: "both",
+    emptyBody: true,
+  })
   @RequirePermissions("notification.mark_own")
   markNotificationRead(
     @CurrentUser() u: AuthUser,

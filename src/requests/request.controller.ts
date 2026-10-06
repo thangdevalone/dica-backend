@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
+import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   CancelRequestDto,
   CreateRequestDto,
@@ -27,25 +28,28 @@ import { RequestService } from "./request.service.js";
 @Controller("requests")
 export class RequestController {
   constructor(private s: RequestService) {}
-  @Get() @RequirePermissions("request.read") list(
-    @CurrentUser() u: AuthUser,
-    @Query() q: RequestListQueryDto,
-  ) {
+  @ApiEndpoint("Xem danh sách yêu cầu hàng", { audience: "both" })
+  @Get()
+  @RequirePermissions("request.read")
+  list(@CurrentUser() u: AuthUser, @Query() q: RequestListQueryDto) {
     return this.s.list(u, q);
   }
-  @Get(":id") @RequirePermissions("request.read") detail(
-    @CurrentUser() u: AuthUser,
-    @Param("id", ParseUUIDPipe) id: string,
-  ) {
+  @ApiEndpoint("Xem chi tiết yêu cầu hàng", { audience: "both" })
+  @Get(":id")
+  @RequirePermissions("request.read")
+  detail(@CurrentUser() u: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.s.detail(u, id);
   }
-  @Post() @RequirePermissions("request.create") create(
-    @CurrentUser() u: AuthUser,
-    @Body() d: CreateRequestDto,
-  ) {
+  @ApiEndpoint("Tạo yêu cầu hàng", { audience: "both" })
+  @Post()
+  @RequirePermissions("request.create")
+  create(@CurrentUser() u: AuthUser, @Body() d: CreateRequestDto) {
     return this.s.create(u, d);
   }
   @Put(":id")
+  @ApiEndpoint("Cập nhật yêu cầu hàng đang ở bản nháp", {
+    audience: "both",
+  })
   @RequirePermissions("request.update_draft")
   update(
     @CurrentUser() u: AuthUser,
@@ -55,6 +59,9 @@ export class RequestController {
     return this.s.updateDraft(u, id, d);
   }
   @Post(":id/revise")
+  @ApiEndpoint("Chỉnh sửa và tạo phiên bản mới của yêu cầu bị trả lại", {
+    audience: "both",
+  })
   @RequirePermissions("request.revise")
   revise(
     @CurrentUser() u: AuthUser,
@@ -64,6 +71,7 @@ export class RequestController {
     return this.s.revise(u, id, d);
   }
   @Post(":id/cancel")
+  @ApiEndpoint("Hủy yêu cầu hàng", { audience: "both" })
   @RequirePermissions("request.cancel")
   cancel(
     @CurrentUser() u: AuthUser,
@@ -73,6 +81,7 @@ export class RequestController {
     return this.s.cancel(u, id, d);
   }
   @Post(":id/refresh-routing")
+  @ApiEndpoint("Tính lại nguồn cấp cho yêu cầu hàng", { audience: "both" })
   @RequirePermissions("request.update_draft")
   refreshRouting(
     @CurrentUser() u: AuthUser,
@@ -81,14 +90,20 @@ export class RequestController {
   ) {
     return this.s.refreshRouting(u, id, d);
   }
-  @Post(":id/submit") @RequirePermissions("request.submit") submit(
+  @ApiEndpoint("Gửi yêu cầu hàng để duyệt", { audience: "both" })
+  @Post(":id/submit")
+  @RequirePermissions("request.submit")
+  submit(
     @CurrentUser() u: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() d: VersionCommandDto,
   ) {
     return this.s.submit(u, id, d);
   }
-  @Post(":id/approve") @RequirePermissions("request.approve") approve(
+  @ApiEndpoint("Duyệt yêu cầu và sinh đơn thực hiện", { audience: "both" })
+  @Post(":id/approve")
+  @RequirePermissions("request.approve")
+  approve(
     @CurrentUser() u: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() d: VersionCommandDto,
@@ -96,7 +111,10 @@ export class RequestController {
   ) {
     return this.s.approve(u, id, d, k);
   }
-  @Post(":id/reject") @RequirePermissions("request.reject") reject(
+  @ApiEndpoint("Từ chối yêu cầu hàng", { audience: "both" })
+  @Post(":id/reject")
+  @RequirePermissions("request.reject")
+  reject(
     @CurrentUser() u: AuthUser,
     @Param("id", ParseUUIDPipe) id: string,
     @Body() d: RejectRequestDto,

@@ -13,6 +13,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
+import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   AdjustmentListQueryDto,
   CreateAdjustmentDto,
@@ -33,6 +34,7 @@ export class OperationController {
   constructor(private readonly service: OperationService) {}
 
   @Get("inventory-adjustments")
+  @ApiEndpoint("Xem danh sách phiếu điều chỉnh tồn kho", { adminWeb: true })
   @RequirePermissions("adjustment.read")
   adjustments(
     @CurrentUser() user: AuthUser,
@@ -42,6 +44,7 @@ export class OperationController {
   }
 
   @Post("inventory-adjustments")
+  @ApiEndpoint("Tạo phiếu điều chỉnh tồn kho", { adminWeb: true })
   @RequirePermissions("adjustment.create")
   createAdjustment(
     @CurrentUser() user: AuthUser,
@@ -51,6 +54,7 @@ export class OperationController {
   }
 
   @Post("inventory-adjustments/:id/approve")
+  @ApiEndpoint("Duyệt phiếu điều chỉnh tồn kho", { adminWeb: true })
   @RequirePermissions("adjustment.approve")
   approveAdjustment(
     @CurrentUser() user: AuthUser,
@@ -61,6 +65,7 @@ export class OperationController {
   }
 
   @Post("inventory-adjustments/:id/post")
+  @ApiEndpoint("Ghi sổ phiếu điều chỉnh vào tồn kho", { adminWeb: true })
   @RequirePermissions("adjustment.post")
   postAdjustment(
     @CurrentUser() user: AuthUser,
@@ -72,6 +77,7 @@ export class OperationController {
   }
 
   @Get("stocktakes")
+  @ApiEndpoint("Xem danh sách phiếu kiểm kê", { audience: "both" })
   @RequirePermissions("stocktake.read")
   stocktakes(
     @CurrentUser() user: AuthUser,
@@ -81,6 +87,7 @@ export class OperationController {
   }
 
   @Post("stocktakes")
+  @ApiEndpoint("Tạo phiếu kiểm kê", { audience: "mobile" })
   @RequirePermissions("stocktake.create")
   createStocktake(
     @CurrentUser() user: AuthUser,
@@ -90,6 +97,9 @@ export class OperationController {
   }
 
   @Put("stocktakes/:id")
+  @ApiEndpoint("Cập nhật phiếu kiểm kê đang ở bản nháp", {
+    audience: "mobile",
+  })
   @RequirePermissions("stocktake.update_draft")
   updateStocktake(
     @CurrentUser() user: AuthUser,
@@ -100,6 +110,7 @@ export class OperationController {
   }
 
   @Post("stocktakes/:id/submit")
+  @ApiEndpoint("Gửi phiếu kiểm kê để xử lý", { audience: "mobile" })
   @RequirePermissions("stocktake.submit")
   submitStocktake(
     @CurrentUser() user: AuthUser,
@@ -110,6 +121,7 @@ export class OperationController {
   }
 
   @Post("stocktakes/:id/reopen")
+  @ApiEndpoint("Mở lại phiếu kiểm kê", { audience: "admin-web" })
   @RequirePermissions("stocktake.reopen")
   reopenStocktake(
     @CurrentUser() user: AuthUser,
@@ -120,18 +132,23 @@ export class OperationController {
   }
 
   @Get("damage-reports")
+  @ApiEndpoint("Xem danh sách phiếu báo hỏng", { audience: "both" })
   @RequirePermissions("damage.read")
   damages(@CurrentUser() user: AuthUser, @Query() query: DamageListQueryDto) {
     return this.service.damages(user, query);
   }
 
   @Post("damage-reports")
+  @ApiEndpoint("Tạo phiếu báo hỏng", { audience: "both" })
   @RequirePermissions("damage.create")
   createDamage(@CurrentUser() user: AuthUser, @Body() dto: CreateDamageDto) {
     return this.service.createDamage(user, dto);
   }
 
   @Put("damage-reports/:id")
+  @ApiEndpoint("Cập nhật phiếu báo hỏng đang ở bản nháp", {
+    audience: "mobile",
+  })
   @RequirePermissions("damage.update_draft")
   updateDamage(
     @CurrentUser() user: AuthUser,
@@ -142,6 +159,7 @@ export class OperationController {
   }
 
   @Post("damage-reports/:id/submit")
+  @ApiEndpoint("Gửi phiếu báo hỏng để xác nhận", { audience: "mobile" })
   @RequirePermissions("damage.submit")
   submitDamage(
     @CurrentUser() user: AuthUser,
@@ -152,6 +170,7 @@ export class OperationController {
   }
 
   @Post("damage-reports/:id/confirm")
+  @ApiEndpoint("Xác nhận và ghi nhận hao hụt do hỏng", { adminWeb: true })
   @RequirePermissions("damage.confirm")
   confirmDamage(
     @CurrentUser() user: AuthUser,

@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -36,19 +36,51 @@ export class SourceRuleListQueryDto extends SourcingListQueryDto {
   source_type?: SourceType;
 }
 export class UpsertEligibilityDto {
-  @IsUUID() facility_id!: string;
-  @IsUUID() department_id!: string;
-  @IsUUID() ingredient_id!: string;
-  @IsOptional() @IsBoolean() active?: boolean;
+  @ApiProperty({ format: "uuid", description: "Mã cơ sở" })
+  @IsUUID()
+  facility_id!: string;
+  @ApiProperty({ format: "uuid", description: "Mã bộ phận" })
+  @IsUUID()
+  department_id!: string;
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
+  @IsUUID()
+  ingredient_id!: string;
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }
 export class UpsertSourceRuleDto {
-  @IsUUID() facility_id!: string;
-  @IsUUID() ingredient_id!: string;
-  @IsEnum(SourceType) source_type!: SourceType;
-  @IsOptional() @IsUUID() source_stock_location_id?: string;
-  @IsOptional() @IsUUID() supplier_id?: string;
+  @ApiProperty({ format: "uuid", description: "Mã cơ sở" })
+  @IsUUID()
+  facility_id!: string;
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
+  @IsUUID()
+  ingredient_id!: string;
+  @ApiProperty({ enum: SourceType })
+  @IsEnum(SourceType)
+  source_type!: SourceType;
+  @ApiPropertyOptional({
+    format: "uuid",
+    description: "Bắt buộc khi nguồn là kho",
+  })
+  @IsOptional()
+  @IsUUID()
+  source_stock_location_id?: string;
+  @ApiPropertyOptional({
+    format: "uuid",
+    description: "Bắt buộc khi nguồn là nhà cung cấp",
+  })
+  @IsOptional()
+  @IsUUID()
+  supplier_id?: string;
 }
 export class BulkSourceRuleDto {
+  @ApiProperty({
+    type: () => [UpsertSourceRuleDto],
+    minItems: 1,
+    maxItems: 500,
+  })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(500)

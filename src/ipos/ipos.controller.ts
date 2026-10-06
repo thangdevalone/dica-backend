@@ -13,6 +13,7 @@ import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
 import { ConfigAudit } from "../common/audit/config-audit.decorator.js";
+import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   CreateAlertRuleDto,
   CreateMappingDto,
@@ -32,12 +33,16 @@ export class IposController {
   constructor(private readonly service: IposService) {}
 
   @Get("sales-imports/adapter-status")
+  @ApiEndpoint("Kiểm tra trạng thái kết nối bộ chuyển đổi iPOS", {
+    adminWeb: true,
+  })
   @RequirePermissions("sales_import.read")
   adapterStatus() {
     return this.service.adapterStatus();
   }
 
   @Get("sales-imports")
+  @ApiEndpoint("Xem danh sách đợt nhập dữ liệu bán hàng", { adminWeb: true })
   @RequirePermissions("sales_import.read")
   salesImports(
     @CurrentUser() user: AuthUser,
@@ -47,12 +52,14 @@ export class IposController {
   }
 
   @Get("menu-item-mappings")
+  @ApiEndpoint("Xem ánh xạ món bán sang nguyên liệu", { adminWeb: true })
   @RequirePermissions("ipos_mapping.read")
   mappings(@CurrentUser() user: AuthUser, @Query() query: IposListQueryDto) {
     return this.service.mappings(user, query);
   }
 
   @Post("menu-item-mappings")
+  @ApiEndpoint("Tạo ánh xạ món bán từ iPOS", { adminWeb: true })
   @RequirePermissions("ipos_mapping.manage")
   @ConfigAudit("IPOS_MAPPING_CONFIG")
   createMapping(@CurrentUser() user: AuthUser, @Body() dto: CreateMappingDto) {
@@ -60,12 +67,16 @@ export class IposController {
   }
 
   @Get("recipes")
+  @ApiEndpoint("Xem danh sách định mức nguyên liệu", { adminWeb: true })
   @RequirePermissions("recipe.read")
   recipes(@CurrentUser() user: AuthUser, @Query() query: RecipeListQueryDto) {
     return this.service.recipes(user, query);
   }
 
   @Post("recipes")
+  @ApiEndpoint("Tạo phiên bản định mức nguyên liệu", {
+    audience: "admin-web",
+  })
   @RequirePermissions("recipe.manage")
   @ConfigAudit("RECIPE_CONFIG")
   createRecipe(@CurrentUser() user: AuthUser, @Body() dto: CreateRecipeDto) {
@@ -73,6 +84,9 @@ export class IposController {
   }
 
   @Post("sales-imports")
+  @ApiEndpoint("Tạo đợt nhập dữ liệu bán hàng", {
+    audience: "admin-web",
+  })
   @RequirePermissions("sales_import.create")
   createImport(
     @CurrentUser() user: AuthUser,
@@ -82,6 +96,10 @@ export class IposController {
   }
 
   @Post("sales-imports/:id/validate")
+  @ApiEndpoint("Kiểm tra dữ liệu của đợt nhập bán hàng", {
+    adminWeb: true,
+    emptyBody: true,
+  })
   @RequirePermissions("sales_import.create")
   validateImport(
     @CurrentUser() user: AuthUser,
@@ -91,6 +109,9 @@ export class IposController {
   }
 
   @Get("sales-imports/:id/preview")
+  @ApiEndpoint("Xem trước kết quả xử lý đợt nhập bán hàng", {
+    audience: "admin-web",
+  })
   @RequirePermissions("sales_import.read")
   previewImport(
     @CurrentUser() user: AuthUser,
@@ -100,6 +121,10 @@ export class IposController {
   }
 
   @Post("sales-imports/:id/commit")
+  @ApiEndpoint("Chốt đợt nhập và ghi nhận dữ liệu bán hàng", {
+    adminWeb: true,
+    emptyBody: true,
+  })
   @RequirePermissions("sales_import.commit")
   commitImport(
     @CurrentUser() user: AuthUser,
@@ -110,6 +135,7 @@ export class IposController {
   }
 
   @Get("variances")
+  @ApiEndpoint("Xem kết quả chênh lệch tiêu hao", { adminWeb: true })
   @RequirePermissions("variance.read")
   variances(
     @CurrentUser() user: AuthUser,
@@ -119,6 +145,9 @@ export class IposController {
   }
 
   @Post("variances/recalculate")
+  @ApiEndpoint("Tính lại chênh lệch tiêu hao cho phiếu kiểm kê", {
+    audience: "admin-web",
+  })
   @RequirePermissions("variance.recalculate")
   recalculate(
     @CurrentUser() user: AuthUser,
@@ -128,6 +157,7 @@ export class IposController {
   }
 
   @Post("alert-rules")
+  @ApiEndpoint("Tạo quy tắc cảnh báo chênh lệch", { adminWeb: true })
   @RequirePermissions("alert_rule.manage")
   @ConfigAudit("ALERT_RULE_CONFIG")
   alertRule(@CurrentUser() user: AuthUser, @Body() dto: CreateAlertRuleDto) {
@@ -135,6 +165,7 @@ export class IposController {
   }
 
   @Get("alert-rules")
+  @ApiEndpoint("Xem danh sách quy tắc cảnh báo", { adminWeb: true })
   @RequirePermissions("alert_rule.manage")
   alertRules(@CurrentUser() user: AuthUser, @Query() query: IposListQueryDto) {
     return this.service.alertRules(user, query);

@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsEnum,
   IsOptional,
@@ -16,6 +16,7 @@ export class GrantListQueryDto extends PaginationDto {
   user_id?: string;
 }
 export class CreateUserDto {
+  @ApiProperty({ example: "nguyenvana", minLength: 3, maxLength: 100 })
   @IsString()
   @Length(3, 100)
   @Matches(/^[a-zA-Z0-9._-]+$/, {
@@ -23,27 +24,81 @@ export class CreateUserDto {
       "Tên đăng nhập chỉ được chứa chữ không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.",
   })
   username!: string;
-  @IsOptional() @IsString() @Length(0, 200) display_name?: string;
-  @IsString() @Length(8, 200) password!: string;
-  @IsEnum(UserKind) kind!: UserKind;
-  @IsOptional() @IsUUID() supplier_id?: string;
-  @IsUUID() role_id!: string;
-  @IsEnum(ScopeType) scope_type!: ScopeType;
-  @IsOptional() @IsUUID() facility_id?: string;
-  @IsOptional() @IsUUID() stock_location_id?: string;
-  @IsOptional() @IsUUID() department_id?: string;
+  @ApiPropertyOptional({ example: "Nguyễn Văn A", maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @Length(0, 200)
+  display_name?: string;
+  @ApiProperty({ example: "MatKhauAnToan#2026", minLength: 8 })
+  @IsString()
+  @Length(8, 200)
+  password!: string;
+  @ApiProperty({ enum: UserKind })
+  @IsEnum(UserKind)
+  kind!: UserKind;
+  @ApiPropertyOptional({
+    format: "uuid",
+    description: "Bắt buộc với tài khoản nhà cung cấp",
+  })
+  @IsOptional()
+  @IsUUID()
+  supplier_id?: string;
+  @ApiProperty({ format: "uuid", description: "Vai trò cấp ban đầu" })
+  @IsUUID()
+  role_id!: string;
+  @ApiProperty({ enum: ScopeType, description: "Loại phạm vi quyền ban đầu" })
+  @IsEnum(ScopeType)
+  scope_type!: ScopeType;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  facility_id?: string;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  stock_location_id?: string;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  department_id?: string;
 }
 export class AssignGrantDto {
-  @IsUUID() user_id!: string;
-  @IsUUID() role_id!: string;
-  @IsEnum(ScopeType) scope_type!: ScopeType;
-  @IsOptional() @IsUUID() facility_id?: string;
-  @IsOptional() @IsUUID() stock_location_id?: string;
-  @IsOptional() @IsUUID() department_id?: string;
+  @ApiProperty({ format: "uuid", description: "Tài khoản được cấp quyền" })
+  @IsUUID()
+  user_id!: string;
+  @ApiProperty({ format: "uuid", description: "Vai trò được cấp" })
+  @IsUUID()
+  role_id!: string;
+  @ApiProperty({ enum: ScopeType })
+  @IsEnum(ScopeType)
+  scope_type!: ScopeType;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  facility_id?: string;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  stock_location_id?: string;
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID()
+  department_id?: string;
 }
 export class UpdateUserDto {
-  @IsOptional() @IsString() @Length(2, 200) display_name?: string;
+  @ApiPropertyOptional({
+    example: "Nguyễn Văn A",
+    minLength: 2,
+    maxLength: 200,
+  })
+  @IsOptional()
+  @IsString()
+  @Length(2, 200)
+  display_name?: string;
 }
 export class ResetPasswordDto {
-  @IsString() @Length(8, 200) password!: string;
+  @ApiProperty({ example: "MatKhauMoi#2026", minLength: 8 })
+  @IsString()
+  @Length(8, 200)
+  password!: string;
 }

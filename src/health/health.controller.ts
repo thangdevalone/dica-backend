@@ -1,15 +1,24 @@
 import { Controller, Get, ServiceUnavailableException } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { Public } from "../auth/decorators/public.decorator.js";
+import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import { PrismaService } from "../database/prisma.service.js";
 @ApiTags("Vận hành")
 @Controller("health")
 export class HealthController {
   constructor(private db: PrismaService) {}
-  @Public() @Get("live") live() {
+  @Public()
+  @ApiEndpoint("Kiểm tra tiến trình API còn hoạt động", {
+    audience: "system",
+  })
+  @Get("live")
+  live() {
     return { data: { status: "ok" }, message: "Dịch vụ đang hoạt động." };
   }
-  @Public() @Get("ready") async ready() {
+  @Public()
+  @ApiEndpoint("Kiểm tra API và cơ sở dữ liệu đã sẵn sàng", { adminWeb: true })
+  @Get("ready")
+  async ready() {
     try {
       await this.db.$queryRaw`SELECT 1`;
       return {

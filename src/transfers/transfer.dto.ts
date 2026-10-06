@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -30,29 +30,46 @@ export class TransferListQueryDto extends PaginationDto {
 }
 
 export class CreateTransferLineDto {
+  @ApiProperty({ format: "uuid", description: "Mã nguyên liệu" })
   @IsUUID()
   ingredient_id!: string;
 
+  @ApiProperty({ format: "uuid", description: "Mã đơn vị tính" })
   @IsUUID()
   unit_id!: string;
 
+  @ApiProperty({
+    example: "5.25",
+    description: "Số lượng dạng chuỗi thập phân",
+  })
   @IsString()
   @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,3})?$/)
   quantity!: string;
 }
 
 export class CreateTransferDto {
+  @ApiProperty({ format: "uuid", description: "Mã kho xuất" })
   @IsUUID()
   from_stock_location_id!: string;
 
+  @ApiProperty({ format: "uuid", description: "Mã kho nhận" })
   @IsUUID()
   to_stock_location_id!: string;
 
+  @ApiPropertyOptional({
+    example: "Chuyển bổ sung nguyên liệu",
+    maxLength: 1000,
+  })
   @IsOptional()
   @IsString()
   @Length(0, 1000)
   note?: string;
 
+  @ApiProperty({
+    type: () => [CreateTransferLineDto],
+    minItems: 1,
+    maxItems: 100,
+  })
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(100)
@@ -62,10 +79,16 @@ export class CreateTransferDto {
 }
 
 export class TransferCommandDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;
 
+  @ApiPropertyOptional({ example: "Ghi chú thao tác", maxLength: 1000 })
   @IsOptional()
   @IsString()
   @Length(0, 1000)
@@ -73,18 +96,33 @@ export class TransferCommandDto {
 }
 
 export class RejectTransferDto extends TransferCommandDto {
+  @ApiProperty({
+    example: "Kho nhận chưa thể tiếp nhận",
+    minLength: 3,
+    maxLength: 1000,
+  })
   @IsString()
   @Length(3, 1000)
   declare note: string;
 }
 
 export class UpdateTransferDto extends CreateTransferDto {
+  @ApiProperty({
+    example: 1,
+    minimum: 1,
+    description: "Phiên bản hiện tại để chống ghi đè",
+  })
   @IsInt()
   @Min(1)
   expected_version!: number;
 }
 
 export class CancelTransferDto extends TransferCommandDto {
+  @ApiProperty({
+    example: "Không còn nhu cầu điều chuyển",
+    minLength: 3,
+    maxLength: 1000,
+  })
   @IsString()
   @Length(3, 1000)
   declare note: string;
