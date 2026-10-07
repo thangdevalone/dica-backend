@@ -64,12 +64,15 @@ export const envSchema = Joi.object({
   R2_ACCESS_KEY_ID: Joi.string().trim().min(1).required(),
   R2_SECRET_ACCESS_KEY: Joi.string().trim().min(1).required(),
   R2_BUCKET: Joi.string().trim().min(1).max(63).required(),
+  R2_PUBLIC_BASE_URL: Joi.string()
+    .trim()
+    .uri({ scheme: ["https"] })
+    .required(),
   R2_UPLOAD_URL_TTL_SECONDS: Joi.number()
     .integer()
     .min(60)
     .max(3600)
     .default(600),
-  R2_VIEW_URL_TTL_SECONDS: Joi.number().integer().min(30).max(900).default(300),
   FCM_ENABLED: Joi.boolean().default(false),
   FCM_PROJECT_ID: Joi.string().trim().allow("").default(""),
   FCM_CLIENT_EMAIL: Joi.string().trim().allow("").default(""),

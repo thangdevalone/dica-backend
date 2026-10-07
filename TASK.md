@@ -12,7 +12,7 @@ Review ngày 2026-10-07. `flow.md` là nguồn nghiệp vụ chính; file này c
 - Có điều chuyển Chi nhánh ↔ Chi nhánh qua duyệt; Kho tổng ↔ Bếp tổng tự duyệt với policy `NO_MANAGER_APPROVAL`, có ETA, lịch sử và thông báo.
 - Có kiểm kê cuối ngày, cảnh báo khi kiểm kê lệch, mapping/định mức/import bán hàng và tính variance ở mức contract/import thủ công.
 - Có báo hỏng, payment tracking cơ bản, notification trong DB và FCM Android/iOS.
-- Ảnh receipt/báo hỏng dùng R2 private; client upload bằng presigned PUT và xem bằng presigned GET sau khi API authorize.
+- Ảnh receipt/báo hỏng dùng R2 public read; client upload bằng presigned PUT và xem bằng public asset URL cố định.
 
 ### Chưa khớp hoặc chưa đủ để coi là hoàn thành
 
@@ -187,7 +187,7 @@ Chốt ngưỡng tuyệt đối/%/số ngày tồn, lịch chạy, cooldown và 
 
 ### FLOW-16 — Gallery ảnh trên Admin Web
 
-Backend đã đủ presigned view URL. Web cần preview/tải ảnh receipt và damage, tự renew URL trước khi hết hạn hoặc retry một lần khi 401/403, không lưu URL vào DB/log/cache dài hạn.
+Backend đã trả public `viewUrl` cố định. Web cần preview/tải ảnh receipt và damage, có loading/placeholder/retry; không cần renew URL hoặc gửi Bearer token khi tải ảnh.
 
 ### FLOW-17 — Hoàn thiện cảnh báo lint Web
 

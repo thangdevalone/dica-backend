@@ -49,14 +49,15 @@ openssl rand -hex 48
 - `BOOTSTRAP_ADMIN_PASSWORD` là mật khẩu admin ban đầu, tối thiểu 12 ký tự. Bootstrap chỉ dùng nó khi tài khoản admin chưa tồn tại và không ghi đè mật khẩu ở các lần deploy sau; có thể xóa biến này khỏi file sau lần deploy đầu tiên.
 - `CORS_ORIGINS` có thể đặt là `*` để chấp nhận mọi nguồn gọi tới API, hoặc điền cụ thể các domain (phân tách bởi dấu phẩy).
 - Không bật `DEMO_POLICY_ENABLED` hoặc Swagger ở production nếu không có nhu cầu rõ ràng.
-- Tạo một bucket Cloudflare R2 private và điền `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. API giữ quyền truy cập file; không bật public bucket.
-- `R2_UPLOAD_URL_TTL_SECONDS` mặc định 600 giây; `R2_VIEW_URL_TTL_SECONDS` mặc định 300 giây. Không tăng TTL xem ảnh quá 900 giây nếu chưa đánh giá rủi ro URL bị lộ và quyền bị thu hồi trong lúc URL còn hiệu lực.
+- Tạo bucket Cloudflare R2, bật public access bằng custom domain (khuyến nghị) hoặc `r2.dev`, rồi điền `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` và `R2_PUBLIC_BASE_URL`. Ví dụ `R2_PUBLIC_BASE_URL=https://assets.example.com`, không thêm `/` cuối.
+- Access key chỉ dùng phía backend để ký upload/kiểm tra object; không đưa credentials vào Mobile/Web. `R2_UPLOAD_URL_TTL_SECONDS` mặc định 600 giây.
+- Object đã finalize được đọc public bằng URL cố định. Thu hồi quyền trong DICA không thu hồi URL đã biết; muốn chặn phải xóa object, đổi key/domain hoặc tắt public access.
 - Compose đặt `TRUST_PROXY_HOPS=1` vì API chỉ nhận traffic qua một reverse proxy trên VPS. Nếu kiến trúc có CDN/proxy bổ sung, chỉ tăng giá trị sau khi xác định chính xác chuỗi proxy.
 - Để bật push Android/iOS, thêm các biến `FCM_ENABLED=true`, `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, `FCM_PRIVATE_KEY` và `FCM_ANDROID_CHANNEL_ID` vào `.env.production`. Workflow CI giữ file này trên VPS, tự truyền các biến qua Compose ở mỗi lần deploy. Với iOS, cấu hình APNs authentication key trong Firebase Console; không lưu APNs key trực tiếp trong repository.
 
-### CORS cho presigned URL R2
+### CORS cho upload trực tiếp và public assets R2
 
-Mobile native không bị browser CORS chi phối. Nếu Admin Web hoặc bản web của ứng dụng dùng presigned URL, vào bucket R2 → **Settings → CORS Policy** và cấu hình allowlist domain thật:
+Mobile native không bị browser CORS chi phối. Admin Web vẫn PUT bằng presigned URL và có thể fetch ảnh public, nên vào bucket R2 → **Settings → CORS Policy** và cấu hình allowlist domain thật:
 
 ```json
 [
@@ -70,7 +71,7 @@ Mobile native không bị browser CORS chi phối. Nếu Admin Web hoặc bản 
 ]
 ```
 
-Không dùng `AllowedOrigins: ["*"]` ở production. Request PUT trực tiếp tới R2 không gửi access token DICA hoặc R2 credentials; quyền nằm trong presigned URL.
+Request PUT trực tiếp tới R2 không gửi access token DICA hoặc R2 credentials; quyền upload nằm trong presigned URL. GET public không cần chữ ký hay Bearer token.
 
 ## 3. Reverse proxy và TLS
 

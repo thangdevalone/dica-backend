@@ -21,7 +21,7 @@ Request ──approve──> FulfillmentOrder ──> Dispatch/Receipt ──> L
 - Chứng từ dùng action command và optimistic version, không PATCH status tự do.
 - Ledger chỉ thêm mới; balance là cache và phải đối chiếu được bằng tổng ledger.
 - Posting, status, audit, idempotency và outbox nằm trong cùng transaction serializable.
-- Thông báo phải authorize lại khi đọc; file private được authorize trước khi phát presigned GET ngắn hạn. Outbox tách lỗi gửi thông báo khỏi transaction đã commit.
+- Thông báo phải authorize lại khi đọc. Attachment upload trực tiếp bằng presigned PUT; object đã finalize được đọc qua public asset URL cố định. Outbox tách lỗi gửi thông báo khỏi transaction đã commit.
 - Decimal dùng `Decimal(20,3)` cho lượng, `Decimal(20,4)` cho giá và hệ số `Decimal(20,6)`.
 - UTC dùng cho timestamp; ngày nghiệp vụ là date và được diễn giải theo `Asia/Ho_Chi_Minh`.
 

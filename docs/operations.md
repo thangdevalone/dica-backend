@@ -76,7 +76,7 @@ Không gửi `page > 1` cùng cursor. `search` và `sort_by` chỉ hoạt độn
 
 ## Backup/restore
 
-Script PowerShell nằm tại `scripts/backup.ps1` và `scripts/restore.ps1`, yêu cầu `pg_dump`/`pg_restore`. Backup file/ảnh private trên R2 phải thực hiện cùng checkpoint với database; storage đã chốt R2 nhưng retention, versioning, RPO/RTO vẫn chờ OPEN-09.
+Script PowerShell nằm tại `scripts/backup.ps1` và `scripts/restore.ps1`, yêu cầu `pg_dump`/`pg_restore`. Backup file/ảnh public trên R2 phải thực hiện cùng checkpoint với database; storage đã chốt R2 nhưng retention, versioning, RPO/RTO vẫn chờ OPEN-09.
 
 Sau restore phải chạy kiểm tra:
 

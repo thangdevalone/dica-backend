@@ -54,26 +54,10 @@ export class AttachmentService {
       },
       orderBy: { createdAt: "desc" },
     });
-    const data = await Promise.all(
-      attachments.map(async ({ objectKey, ...attachment }) => {
-        if (!objectKey)
-          return {
-            ...attachment,
-            viewUrl: null,
-            viewUrlExpiresAt: null,
-          };
-        const signed = await this.storage.createViewUrl(
-          objectKey,
-          attachment.fileName,
-          attachment.mimeType,
-        );
-        return {
-          ...attachment,
-          viewUrl: signed.url,
-          viewUrlExpiresAt: signed.expiresAt,
-        };
-      }),
-    );
+    const data = attachments.map(({ objectKey, ...attachment }) => ({
+      ...attachment,
+      viewUrl: objectKey ? this.storage.publicUrl(objectKey) : null,
+    }));
     return { data, message: "Lấy danh sách ảnh đính kèm thành công." };
   }
 
@@ -214,37 +198,6 @@ export class AttachmentService {
     };
   }
 
-  async viewUrl(user: AuthUser, id: string) {
-    const attachment = await this.db.attachment.findFirst({
-      where: {
-        id,
-        organizationId: user.organizationId,
-        uploadStatus: "READY",
-      },
-    });
-    if (!attachment) this.notFound();
-    await this.authorize(user, {
-      resource_type: attachment.resourceType as "RECEIPT" | "DAMAGE_REPORT",
-      resource_id: attachment.resourceId,
-    });
-    if (!attachment.objectKey)
-      throw new ApiException(
-        ErrorCode.INVALID_STATE,
-        "Ảnh cũ chưa được chuyển sang R2.",
-        HttpStatus.CONFLICT,
-      );
-
-    const signed = await this.storage.createViewUrl(
-      attachment.objectKey,
-      attachment.fileName,
-      attachment.mimeType,
-    );
-    return {
-      data: signed,
-      message: "Cấp URL xem ảnh thành công.",
-    };
-  }
-
   async content(user: AuthUser, id: string) {
     const attachment = await this.db.attachment.findFirst({
       where: {
@@ -302,6 +255,7 @@ export class AttachmentService {
     fileName: string;
     mimeType: string;
     sizeBytes: number;
+    objectKey?: string | null;
     createdAt: Date;
   }) {
     return {
@@ -312,6 +266,9 @@ export class AttachmentService {
       mimeType: attachment.mimeType,
       sizeBytes: attachment.sizeBytes,
       createdAt: attachment.createdAt,
+      viewUrl: attachment.objectKey
+        ? this.storage.publicUrl(attachment.objectKey)
+        : null,
     };
   }
 

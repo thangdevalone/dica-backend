@@ -764,6 +764,7 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       mimeType: { type: "string" },
       sizeBytes: { type: "integer", minimum: 1 },
       createdAt: dateTime,
+      viewUrl: nullable({ type: "string", format: "uri" }),
     },
   ),
   AttachmentUploadInit: entity(
@@ -779,10 +780,6 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       expiresAt: dateTime,
     },
   ),
-  AttachmentViewUrl: entity(["url", "expiresAt"], {
-    url: { type: "string", format: "uri" },
-    expiresAt: dateTime,
-  }),
   AttachmentListItem: entity(
     [
       "id",
@@ -793,7 +790,6 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       "sizeBytes",
       "createdAt",
       "viewUrl",
-      "viewUrlExpiresAt",
     ],
     {
       id: uuid,
@@ -804,7 +800,6 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       sizeBytes: { type: "integer", minimum: 1 },
       createdAt: dateTime,
       viewUrl: nullable({ type: "string", format: "uri" }),
-      viewUrlExpiresAt: nullable(dateTime),
     },
   ),
   StocktakeLine: entity(
@@ -1243,8 +1238,6 @@ function responseSchemaName(path: string): string {
   if (path.startsWith("/push-devices")) return "PushDevice";
   if (path === "/attachments/upload-init") return "AttachmentUploadInit";
   if (path === "/attachments") return "AttachmentListItem";
-  if (/^\/attachments\/\{[^}]+\}\/view-url$/.test(path))
-    return "AttachmentViewUrl";
   if (path.startsWith("/attachments")) return "Attachment";
   if (path.startsWith("/stocktakes")) return "Stocktake";
   if (path.startsWith("/damage-reports")) return "DamageReport";
