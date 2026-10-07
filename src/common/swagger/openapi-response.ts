@@ -766,6 +766,19 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       createdAt: dateTime,
     },
   ),
+  AttachmentUploadInit: entity(
+    ["attachment", "uploadUrl", "method", "headers", "expiresAt"],
+    {
+      attachment: ref("Attachment"),
+      uploadUrl: { type: "string", format: "uri" },
+      method: { type: "string", enum: ["PUT"] },
+      headers: {
+        type: "object",
+        additionalProperties: { type: "string" },
+      },
+      expiresAt: dateTime,
+    },
+  ),
   StocktakeLine: entity(
     ["id", "ingredientId", "countedQuantity", "countedAt"],
     {
@@ -1200,6 +1213,7 @@ function responseSchemaName(path: string): string {
   if (path.startsWith("/notifications")) return "Notification";
   if (path === "/push-devices/unregister") return "UpdatedCount";
   if (path.startsWith("/push-devices")) return "PushDevice";
+  if (path === "/attachments/upload-init") return "AttachmentUploadInit";
   if (path.startsWith("/attachments")) return "Attachment";
   if (path.startsWith("/stocktakes")) return "Stocktake";
   if (path.startsWith("/damage-reports")) return "DamageReport";

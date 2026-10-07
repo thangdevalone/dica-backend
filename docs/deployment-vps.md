@@ -49,6 +49,7 @@ openssl rand -hex 48
 - `BOOTSTRAP_ADMIN_PASSWORD` là mật khẩu admin ban đầu, tối thiểu 12 ký tự. Bootstrap chỉ dùng nó khi tài khoản admin chưa tồn tại và không ghi đè mật khẩu ở các lần deploy sau; có thể xóa biến này khỏi file sau lần deploy đầu tiên.
 - `CORS_ORIGINS` có thể đặt là `*` để chấp nhận mọi nguồn gọi tới API, hoặc điền cụ thể các domain (phân tách bởi dấu phẩy).
 - Không bật `DEMO_POLICY_ENABLED` hoặc Swagger ở production nếu không có nhu cầu rõ ràng.
+- Tạo một bucket Cloudflare R2 private và điền `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. API giữ quyền truy cập file; không bật public bucket.
 - Compose đặt `TRUST_PROXY_HOPS=1` vì API chỉ nhận traffic qua một reverse proxy trên VPS. Nếu kiến trúc có CDN/proxy bổ sung, chỉ tăng giá trị sau khi xác định chính xác chuỗi proxy.
 - Để bật push Android/iOS, thêm các biến `FCM_ENABLED=true`, `FCM_PROJECT_ID`, `FCM_CLIENT_EMAIL`, `FCM_PRIVATE_KEY` và `FCM_ANDROID_CHANNEL_ID` vào `.env.production`. Workflow CI giữ file này trên VPS, tự truyền các biến qua Compose ở mỗi lần deploy. Với iOS, cấu hình APNs authentication key trong Firebase Console; không lưu APNs key trực tiếp trong repository.
 
@@ -115,6 +116,12 @@ docker compose --env-file .env.production pull
 docker compose --env-file .env.production up -d --remove-orphans --wait
 docker compose --env-file .env.production ps
 curl --fail http://127.0.0.1:3000/api/v1/health/ready
+```
+
+Sau lần deploy đầu tiên có migration R2, chuyển các attachment cũ khỏi PostgreSQL. Lệnh có thể chạy lại an toàn nếu bị gián đoạn:
+
+```bash
+docker compose --env-file .env.production exec -T api npm run attachments:migrate-r2
 ```
 
 Build và thử image local trước khi push:

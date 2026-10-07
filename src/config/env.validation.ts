@@ -60,6 +60,15 @@ export const envSchema = Joi.object({
     .max(300_000)
     .default(30_000),
   DEMO_POLICY_ENABLED: Joi.boolean().default(false),
+  R2_ACCOUNT_ID: Joi.string().trim().min(1).required(),
+  R2_ACCESS_KEY_ID: Joi.string().trim().min(1).required(),
+  R2_SECRET_ACCESS_KEY: Joi.string().trim().min(1).required(),
+  R2_BUCKET: Joi.string().trim().min(1).max(63).required(),
+  R2_UPLOAD_URL_TTL_SECONDS: Joi.number()
+    .integer()
+    .min(60)
+    .max(3600)
+    .default(600),
   FCM_ENABLED: Joi.boolean().default(false),
   FCM_PROJECT_ID: Joi.string().trim().allow("").default(""),
   FCM_CLIENT_EMAIL: Joi.string().trim().allow("").default(""),

@@ -7,17 +7,17 @@ import {
   Post,
   Query,
   Res,
-  UploadedFile,
-  UseInterceptors,
 } from "@nestjs/common";
-import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import type { AuthUser } from "../auth/auth.types.js";
 import { CurrentUser } from "../auth/decorators/current-user.decorator.js";
 import { RequirePermissions } from "../auth/decorators/permissions.decorator.js";
 import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
-import { AttachmentResourceDto } from "./attachment.dto.js";
+import {
+  AttachmentResourceDto,
+  AttachmentUploadInitDto,
+} from "./attachment.dto.js";
 import { AttachmentService } from "./attachment.service.js";
 
 @ApiTags("Ảnh đính kèm")
@@ -35,38 +35,29 @@ export class AttachmentController {
     return this.service.list(user, query);
   }
 
-  @Post()
-  @ApiEndpoint("Tải ảnh xác nhận cho phiếu nhận hàng hoặc báo hỏng", {
+  @Post("upload-init")
+  @ApiEndpoint("Khởi tạo URL để mobile tải ảnh trực tiếp lên R2", {
     audience: "mobile",
   })
   @RequirePermissions("attachment.upload")
-  @ApiConsumes("multipart/form-data")
-  @ApiBody({
-    schema: {
-      type: "object",
-      required: ["resource_type", "resource_id", "file"],
-      properties: {
-        resource_type: { type: "string", enum: ["RECEIPT", "DAMAGE_REPORT"] },
-        resource_id: { type: "string", format: "uuid" },
-        file: { type: "string", format: "binary" },
-      },
-    },
-  })
-  @UseInterceptors(
-    FileInterceptor("file", { limits: { fileSize: 5 * 1024 * 1024 } }),
-  )
-  upload(
+  createUpload(
     @CurrentUser() user: AuthUser,
-    @Body() dto: AttachmentResourceDto,
-    @UploadedFile()
-    file?: {
-      originalname: string;
-      mimetype: string;
-      size: number;
-      buffer: Buffer;
-    },
+    @Body() dto: AttachmentUploadInitDto,
   ) {
-    return this.service.upload(user, dto, file);
+    return this.service.createUpload(user, dto);
+  }
+
+  @Post(":id/finalize")
+  @ApiEndpoint("Xác nhận ảnh đã được mobile tải trực tiếp lên R2", {
+    audience: "mobile",
+    emptyBody: true,
+  })
+  @RequirePermissions("attachment.upload")
+  finalizeUpload(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.service.finalizeUpload(user, id);
   }
 
   @Get(":id/content")
@@ -79,6 +70,8 @@ export class AttachmentController {
   ) {
     const result = await this.service.content(user, id);
     response.setHeader("Content-Type", result.mimeType);
+    response.setHeader("Content-Length", result.sizeBytes);
+    response.setHeader("Cache-Control", "private, no-store");
     response.setHeader(
       "Content-Disposition",
       `inline; filename*=UTF-8''${encodeURIComponent(result.fileName)}`,

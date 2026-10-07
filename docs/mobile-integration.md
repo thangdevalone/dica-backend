@@ -205,14 +205,35 @@ Idempotency-Key: mobile:<uuid>
 
 Backend tự phân loại đủ/thiếu/thừa. Nếu thiếu, đơn còn `PARTIAL` và có thể tạo receipt bù lần sau. Nếu thừa, receipt có thể vào `PENDING_EXCESS_REVIEW`; Mobile không tự cộng phần thừa trước quyết định backend. Màn hình lịch sử đọc `GET /receipts`, `GET /receipts/{id}` và `GET /discrepancies?status=OPEN`.
 
-Sau khi tạo receipt và trước hoặc sau khi post, tải nhiều ảnh xác nhận bằng `multipart/form-data`:
+Sau khi tạo receipt và trước hoặc sau khi post, mỗi ảnh được tải trực tiếp từ Mobile lên R2 theo ba bước. Backend không nhận bytes ảnh.
+
+1. Xin presigned URL:
 
 ```http
-POST /attachments
-Content-Type: multipart/form-data
+POST /attachments/upload-init
+Content-Type: application/json
 ```
 
-Các part gồm `resource_type=RECEIPT`, `resource_id=<receipt-uuid>` và `file=<ảnh>`. Mỗi ảnh tối đa 5 MB; hỗ trợ JPEG, PNG, WEBP, HEIC/HEIF. Xem danh sách bằng `GET /attachments?resource_type=RECEIPT&resource_id=<uuid>` và tải ảnh bằng `GET /attachments/{id}/content`.
+```json
+{
+  "resource_type": "RECEIPT",
+  "resource_id": "<receipt-uuid>",
+  "file_name": "receipt.jpg",
+  "content_type": "image/jpeg",
+  "size_bytes": 123456
+}
+```
+
+2. Dùng đúng `uploadUrl`, HTTP method và toàn bộ headers (`Content-Type`, `Content-Length`, `If-None-Match`) trong response để `PUT` bytes ảnh thẳng lên R2. Không gửi access token của DICA hoặc R2 credentials trong request này. Các header phải khớp với dữ liệu backend đã ký.
+
+3. Sau khi R2 trả 2xx, xác nhận với backend:
+
+```http
+POST /attachments/{attachment-id}/finalize
+Authorization: Bearer <access-token>
+```
+
+Backend chỉ đưa ảnh vào danh sách sau khi kiểm tra object trên R2, kích thước, Content-Type và định dạng thực. Presigned URL mặc định hết hạn sau 10 phút. Mỗi ảnh tối đa 5 MB; hỗ trợ JPEG, PNG, WEBP, HEIC/HEIF. Xem danh sách bằng `GET /attachments?resource_type=RECEIPT&resource_id=<uuid>` và tải ảnh bằng `GET /attachments/{id}/content`.
 
 Nếu hàng bị hỏng và bị từ chối ngay tại điểm nhận, `quantity` chỉ là lượng chấp nhận thực tế và ghi rõ tình trạng trong `note`; phần không nhận sẽ thành thiếu. Backend chưa có trường receipt riêng để phân loại `DAMAGED` hoặc flow trả NCC.
 

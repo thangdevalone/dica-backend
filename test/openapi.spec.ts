@@ -132,6 +132,9 @@ test("FCM, attachment and iPOS operations expose concrete response models", () =
   input.paths["/attachments"] = {
     get: { responses: { "200": { description: "" } } },
   };
+  input.paths["/attachments/upload-init"] = {
+    post: { responses: { "201": { description: "" } } },
+  };
   input.paths["/variances/recalculate"] = {
     post: { responses: { "201": { description: "" } } },
   };
@@ -146,6 +149,10 @@ test("FCM, attachment and iPOS operations expose concrete response models", () =
   assert.equal(
     result.paths["/attachments"]?.get?.["x-dica-response-schema"],
     "Attachment",
+  );
+  assert.equal(
+    result.paths["/attachments/upload-init"]?.post?.["x-dica-response-schema"],
+    "AttachmentUploadInit",
   );
   assert.equal(
     result.paths["/variances/recalculate"]?.post?.["x-dica-response-schema"],

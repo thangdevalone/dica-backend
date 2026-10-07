@@ -9,6 +9,10 @@ const validEnvironment = {
   DATABASE_URL: "postgresql://user:password@localhost:5432/dica",
   JWT_ACCESS_SECRET: "a".repeat(32),
   JWT_REFRESH_SECRET: "b".repeat(32),
+  R2_ACCOUNT_ID: "account-id",
+  R2_ACCESS_KEY_ID: "access-key-id",
+  R2_SECRET_ACCESS_KEY: "secret-access-key",
+  R2_BUCKET: "dica-attachments",
 };
 
 test("từ chối JWT secret mặc định hoặc dùng chung", () => {
@@ -88,6 +92,13 @@ test("FCM can stay disabled without credentials and requires a service account w
     }).error,
     undefined,
   );
+});
+
+test("R2 credentials are required for private attachment storage", () => {
+  assert.ok(
+    envSchema.validate({ ...validEnvironment, R2_SECRET_ACCESS_KEY: "" }).error,
+  );
+  assert.equal(envSchema.validate(validEnvironment).error, undefined);
 });
 
 function filesUnder(directory: string): string[] {

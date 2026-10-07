@@ -1198,12 +1198,16 @@ model Attachment {
   fileName       String       @map("file_name") @db.VarChar(255)
   mimeType       String       @map("mime_type") @db.VarChar(100)
   sizeBytes      Int          @map("size_bytes")
-  content        Bytes
+  objectKey      String?      @unique @map("object_key") @db.VarChar(512)
+  content        Bytes?
+  uploadStatus   String       @default("READY") @map("upload_status") @db.VarChar(20)
+  uploadExpiresAt DateTime?    @map("upload_expires_at")
   createdAt      DateTime     @default(now()) @map("created_at")
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   uploadedBy     User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, resourceType, resourceId, createdAt])
+  @@index([organizationId, uploadStatus, uploadExpiresAt])
   @@map("attachments")
 }
 
