@@ -69,6 +69,7 @@ export const envSchema = Joi.object({
     .min(60)
     .max(3600)
     .default(600),
+  R2_VIEW_URL_TTL_SECONDS: Joi.number().integer().min(30).max(900).default(300),
   FCM_ENABLED: Joi.boolean().default(false),
   FCM_PROJECT_ID: Joi.string().trim().allow("").default(""),
   FCM_CLIENT_EMAIL: Joi.string().trim().allow("").default(""),

@@ -46,6 +46,7 @@ function createFixture(options?: { prefix?: Buffer; contentLength?: number }) {
         return record;
       },
       findFirst: async () => record,
+      findMany: async () => (record ? [record] : []),
       updateMany: async () => {
         if (record) record["uploadStatus"] = "READY";
         return { count: record ? 1 : 0 };
@@ -60,6 +61,10 @@ function createFixture(options?: { prefix?: Buffer; contentLength?: number }) {
     createUploadUrl: async () => ({
       url: "https://r2.example/presigned",
       expiresAt: new Date(Date.now() + 600_000),
+    }),
+    createViewUrl: async () => ({
+      url: "https://r2.example/view",
+      expiresAt: new Date(Date.now() + 300_000),
     }),
     head: async () => ({
       contentLength: options?.contentLength ?? dto.size_bytes,
@@ -98,6 +103,7 @@ test("presigned URL bắt buộc đúng type, size và không cho ghi đè", asy
       R2_SECRET_ACCESS_KEY: "secret-access-key",
       R2_BUCKET: "dica-attachments",
       R2_UPLOAD_URL_TTL_SECONDS: 600,
+      R2_VIEW_URL_TTL_SECONDS: 300,
     }),
   );
   const signed = await storage.createUploadUrl(
@@ -122,6 +128,30 @@ test("finalize kiểm tra object R2 rồi chuyển attachment sang READY", async
 
   assert.equal(fixture.getRecord()?.["uploadStatus"], "READY");
   assert.deepEqual(fixture.deleted, []);
+});
+
+test("chỉ cấp URL xem R2 sau khi kiểm tra attachment READY", async () => {
+  const fixture = createFixture();
+  const initialized = await fixture.service.createUpload(user, dto);
+  const id = initialized.data.attachment.id as string;
+  await fixture.service.finalizeUpload(user, id);
+  const result = await fixture.service.viewUrl(user, id);
+
+  assert.equal(result.data.url, "https://r2.example/view");
+});
+
+test("danh sách attachment trả URL xem trực tiếp và thời điểm hết hạn", async () => {
+  const fixture = createFixture();
+  const initialized = await fixture.service.createUpload(user, dto);
+  await fixture.service.finalizeUpload(
+    user,
+    initialized.data.attachment.id as string,
+  );
+  const result = await fixture.service.list(user, dto);
+
+  assert.equal(result.data[0]?.viewUrl, "https://r2.example/view");
+  assert.ok(result.data[0]?.viewUrlExpiresAt instanceof Date);
+  assert.equal("objectKey" in result.data[0]!, false);
 });
 
 test("finalize xóa file giả ảnh khỏi R2", async () => {

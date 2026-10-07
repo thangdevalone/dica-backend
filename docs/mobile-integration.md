@@ -233,7 +233,96 @@ POST /attachments/{attachment-id}/finalize
 Authorization: Bearer <access-token>
 ```
 
-Backend chỉ đưa ảnh vào danh sách sau khi kiểm tra object trên R2, kích thước, Content-Type và định dạng thực. Presigned URL mặc định hết hạn sau 10 phút. Mỗi ảnh tối đa 5 MB; hỗ trợ JPEG, PNG, WEBP, HEIC/HEIF. Xem danh sách bằng `GET /attachments?resource_type=RECEIPT&resource_id=<uuid>` và tải ảnh bằng `GET /attachments/{id}/content`.
+Backend chỉ đưa ảnh vào danh sách sau khi kiểm tra object trên R2, kích thước, Content-Type và định dạng thực. Presigned URL upload mặc định hết hạn sau 10 phút. Mỗi ảnh tối đa 5 MB; hỗ trợ JPEG, PNG, WEBP, HEIC/HEIF.
+
+Xem danh sách bằng `GET /attachments?resource_type=RECEIPT&resource_id=<uuid>`. Mỗi attachment R2 trong danh sách trả sẵn URL có thể gắn trực tiếp vào image component, không cần thêm access token vào request tới R2:
+
+```json
+{
+  "data": [
+    {
+      "id": "<attachment-uuid>",
+      "resourceType": "RECEIPT",
+      "resourceId": "<receipt-uuid>",
+      "fileName": "receipt.jpg",
+      "mimeType": "image/jpeg",
+      "sizeBytes": 123456,
+      "createdAt": "2026-10-07T11:55:00.000Z",
+      "viewUrl": "https://...r2.cloudflarestorage.com/...",
+      "viewUrlExpiresAt": "2026-10-07T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+`viewUrl` là URL xem trực tiếp, không phải object key và không phải URL public cố định. Attachment cũ chưa chạy migration R2 có thể trả `viewUrl=null`; trường hợp này Mobile dùng download gateway có Bearer token hoặc chờ vận hành chạy migration.
+
+Để renew riêng một ảnh mà không tải lại cả danh sách, gọi:
+
+```http
+GET /attachments/{attachment-id}/view-url
+Authorization: Bearer <access-token>
+```
+
+```json
+{
+  "data": {
+    "url": "https://...r2.cloudflarestorage.com/...",
+    "expiresAt": "2026-10-07T12:00:00.000Z"
+  }
+}
+```
+
+URL xem ảnh mặc định sống 5 phút. Mobile không lưu URL này như URL cố định. Quy tắc refresh bắt buộc:
+
+- Nếu `viewUrlExpiresAt <= now + 30 giây`, renew trước khi render.
+- Nếu image request lỗi `401/403`, gọi `view-url` và retry đúng một lần.
+- Dùng single-flight theo `attachment.id`: nhiều component cùng cần một ảnh phải dùng chung một request renew.
+- Chỉ giữ URL trong memory cache; dữ liệu persisted chỉ giữ attachment ID/metadata.
+- Khi backend `view-url` trả `401`, refresh access token theo cơ chế auth hiện có rồi gọi lại đúng một lần. `403/404` từ backend là mất quyền hoặc resource không còn tồn tại, không retry vô hạn.
+
+Pseudo-code dùng chung cho React Native/Flutter/native:
+
+```ts
+const renewInFlight = new Map<string, Promise<Attachment>>();
+const RENEW_SKEW_MS = 30_000;
+
+async function ensureFreshView(item: Attachment): Promise<Attachment> {
+  const expiresAt = item.viewUrlExpiresAt
+    ? Date.parse(item.viewUrlExpiresAt)
+    : 0;
+  if (item.viewUrl && expiresAt > Date.now() + RENEW_SKEW_MS) return item;
+
+  const running = renewInFlight.get(item.id);
+  if (running) return running;
+
+  const renew = api
+    .get(`/attachments/${item.id}/view-url`)
+    .then((response) => {
+      const signed = response.data.data;
+      return {
+        ...item,
+        viewUrl: signed.url,
+        viewUrlExpiresAt: signed.expiresAt,
+      };
+    })
+    .finally(() => renewInFlight.delete(item.id));
+
+  renewInFlight.set(item.id, renew);
+  return renew;
+}
+
+async function onImageLoadError(item: Attachment, alreadyRetried: boolean) {
+  if (alreadyRetried) throw new Error("Không tải được ảnh");
+  return ensureFreshView({
+    ...item,
+    viewUrl: null,
+    viewUrlExpiresAt: null,
+  });
+}
+```
+
+Presigned URL là bearer token nên không ghi vào log/analytics và không chia sẻ ra ngoài ứng dụng. Endpoint `GET /attachments/{id}/content` vẫn được giữ làm download gateway tương thích cho attachment cũ chưa migrate; luồng mới ưu tiên `view-url` để bytes đi thẳng từ R2 tới client. Mọi API list khác được bổ sung ảnh trong tương lai phải dùng cùng cặp trường `viewUrl`/`viewUrlExpiresAt` và cùng cơ chế renew, không trả public R2 URL.
 
 Nếu hàng bị hỏng và bị từ chối ngay tại điểm nhận, `quantity` chỉ là lượng chấp nhận thực tế và ghi rõ tình trạng trong `note`; phần không nhận sẽ thành thiếu. Backend chưa có trường receipt riêng để phân loại `DAMAGED` hoặc flow trả NCC.
 

@@ -35,7 +35,7 @@ export class AttachmentService {
 
   async list(user: AuthUser, query: AttachmentResourceDto) {
     await this.authorize(user, query);
-    const data = await this.db.attachment.findMany({
+    const attachments = await this.db.attachment.findMany({
       where: {
         organizationId: user.organizationId,
         resourceType: query.resource_type,
@@ -49,10 +49,31 @@ export class AttachmentService {
         fileName: true,
         mimeType: true,
         sizeBytes: true,
+        objectKey: true,
         createdAt: true,
       },
       orderBy: { createdAt: "desc" },
     });
+    const data = await Promise.all(
+      attachments.map(async ({ objectKey, ...attachment }) => {
+        if (!objectKey)
+          return {
+            ...attachment,
+            viewUrl: null,
+            viewUrlExpiresAt: null,
+          };
+        const signed = await this.storage.createViewUrl(
+          objectKey,
+          attachment.fileName,
+          attachment.mimeType,
+        );
+        return {
+          ...attachment,
+          viewUrl: signed.url,
+          viewUrlExpiresAt: signed.expiresAt,
+        };
+      }),
+    );
     return { data, message: "Lấy danh sách ảnh đính kèm thành công." };
   }
 
@@ -190,6 +211,37 @@ export class AttachmentService {
     return {
       data: this.metadata(attachment),
       message: "Hoàn tất tải ảnh lên R2 thành công.",
+    };
+  }
+
+  async viewUrl(user: AuthUser, id: string) {
+    const attachment = await this.db.attachment.findFirst({
+      where: {
+        id,
+        organizationId: user.organizationId,
+        uploadStatus: "READY",
+      },
+    });
+    if (!attachment) this.notFound();
+    await this.authorize(user, {
+      resource_type: attachment.resourceType as "RECEIPT" | "DAMAGE_REPORT",
+      resource_id: attachment.resourceId,
+    });
+    if (!attachment.objectKey)
+      throw new ApiException(
+        ErrorCode.INVALID_STATE,
+        "Ảnh cũ chưa được chuyển sang R2.",
+        HttpStatus.CONFLICT,
+      );
+
+    const signed = await this.storage.createViewUrl(
+      attachment.objectKey,
+      attachment.fileName,
+      attachment.mimeType,
+    );
+    return {
+      data: signed,
+      message: "Cấp URL xem ảnh thành công.",
     };
   }
 

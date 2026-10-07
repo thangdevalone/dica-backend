@@ -60,6 +60,18 @@ export class AttachmentController {
     return this.service.finalizeUpload(user, id);
   }
 
+  @Get(":id/view-url")
+  @ApiEndpoint("Cấp URL ngắn hạn để xem ảnh trực tiếp từ R2", {
+    audience: "both",
+  })
+  @RequirePermissions("attachment.upload")
+  viewUrl(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+  ) {
+    return this.service.viewUrl(user, id);
+  }
+
   @Get(":id/content")
   @ApiEndpoint("Tải nội dung ảnh đính kèm", { audience: "both" })
   @RequirePermissions("attachment.upload")

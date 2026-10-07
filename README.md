@@ -19,9 +19,9 @@ Backend NestJS dạng modular monolith cho web quản trị và ứng dụng DIC
 - Mọi thay đổi cấu hình admin hiện có đều ghi lịch sử tập trung, gồm người thao tác, request, dữ liệu vào/kết quả và thời gian.
 - Mọi API danh sách đều phân trang mặc định; hỗ trợ offset đầy đủ metadata và cursor không `COUNT(*)` cho dữ liệu lớn.
 
-Trạng thái toàn bộ scope và các blocker OPEN được ghi tại [docs/module-status.md](docs/module-status.md). Các module chưa hoàn thiện không có endpoint giả trả thành công.
+Nguồn nghiệp vụ chính là [flow.md](flow.md). Kết quả đối chiếu code, phần còn thiếu và câu hỏi cần chốt với khách nằm tại [TASK.md](TASK.md). Tài liệu bàn giao cho Mobile nằm tại [docs/mobile-integration.md](docs/mobile-integration.md).
 
-Flow Web/Mobile đã đối chiếu từ Figma được ghi tại [docs/figma-api-flow.md](docs/figma-api-flow.md). Tài liệu bàn giao riêng cho mobile dev nằm tại [docs/mobile-integration.md](docs/mobile-integration.md).
+Các tài liệu kỹ thuật còn lại được tách theo mục đích: [kiến trúc](docs/architecture.md), [quyết định](docs/decisions.md), [deploy VPS](docs/deployment-vps.md) và [vận hành](docs/operations.md). Swagger tại `/docs` là API contract thực thi.
 
 ## Chạy local
 

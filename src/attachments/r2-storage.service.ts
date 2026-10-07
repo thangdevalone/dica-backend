@@ -18,6 +18,7 @@ export class R2StorageService {
   private readonly bucket: string;
   private readonly client: S3Client;
   private readonly uploadUrlTtlSeconds: number;
+  private readonly viewUrlTtlSeconds: number;
 
   constructor(config: ConfigService) {
     const accountId = config.getOrThrow<string>("R2_ACCOUNT_ID");
@@ -26,6 +27,7 @@ export class R2StorageService {
       "R2_UPLOAD_URL_TTL_SECONDS",
       600,
     );
+    this.viewUrlTtlSeconds = config.get<number>("R2_VIEW_URL_TTL_SECONDS", 300);
     this.client = new S3Client({
       region: "auto",
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -36,6 +38,27 @@ export class R2StorageService {
       requestChecksumCalculation: "WHEN_REQUIRED",
       responseChecksumValidation: "WHEN_REQUIRED",
     });
+  }
+
+  async createViewUrl(key: string, fileName: string, contentType: string) {
+    try {
+      const expiresAt = new Date(Date.now() + this.viewUrlTtlSeconds * 1_000);
+      const disposition = `inline; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+      const url = await getSignedUrl(
+        this.client,
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ResponseContentType: contentType,
+          ResponseContentDisposition: disposition,
+        }),
+        { expiresIn: this.viewUrlTtlSeconds },
+      );
+      return { url, expiresAt };
+    } catch (error) {
+      this.logger.error(`R2 view presign failed for key ${key}`, error);
+      this.unavailable();
+    }
   }
 
   async createUploadUrl(
