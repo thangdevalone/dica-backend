@@ -304,7 +304,18 @@ export class UserService {
   }
   async roles(actor: AuthUser, q: PaginationDto) {
     this.scope.assertAccess(actor, "role.read", {});
-    const where = { organizationId: actor.organizationId };
+    const search = normalizedSearch(q);
+    const where = {
+      organizationId: actor.organizationId,
+      ...(search
+        ? {
+            OR: [
+              { code: { contains: search, mode: "insensitive" as const } },
+              { name: { contains: search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
     const { data, meta } = await paginateById(
       q,
       ({ skip, take, cursorId }) =>
@@ -317,6 +328,7 @@ export class UserService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.role.count({ where }),
+      { searchHandled: true },
     );
     return { data, message: "Lấy danh sách vai trò thành công.", meta };
   }
@@ -444,10 +456,40 @@ export class UserService {
   }
   async grants(actor: AuthUser, q: GrantListQueryDto) {
     this.scope.assertAccess(actor, "grant.read", {});
+    const search = normalizedSearch(q);
     const where = {
       user: { organizationId: actor.organizationId },
       revokedAt: null,
       ...(q.user_id ? { userId: q.user_id } : {}),
+      ...(search
+        ? {
+            OR: [
+              {
+                user: {
+                  username: { contains: search, mode: "insensitive" as const },
+                },
+              },
+              {
+                user: {
+                  displayName: {
+                    contains: search,
+                    mode: "insensitive" as const,
+                  },
+                },
+              },
+              {
+                role: {
+                  code: { contains: search, mode: "insensitive" as const },
+                },
+              },
+              {
+                role: {
+                  name: { contains: search, mode: "insensitive" as const },
+                },
+              },
+            ],
+          }
+        : {}),
     };
     const { data, meta } = await paginateById(
       q,
@@ -474,6 +516,7 @@ export class UserService {
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
         }),
       () => this.db.roleGrant.count({ where }),
+      { searchHandled: true },
     );
     return { data, message: "Lấy danh sách phân quyền thành công.", meta };
   }

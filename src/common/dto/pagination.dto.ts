@@ -36,20 +36,6 @@ export class PaginationDto {
   @Max(100, { message: "Kích thước trang không được vượt quá 100." })
   page_size?: number;
 
-  /** @deprecated Dùng page_size. Giữ lại để tương thích client cũ. */
-  @ApiPropertyOptional({
-    deprecated: true,
-    description: "Tên cũ của page_size.",
-    minimum: 1,
-    maximum: 100,
-  })
-  @IsOptional()
-  @Transform(({ value }) => Number(value))
-  @IsInt({ message: "Kích thước trang phải là số nguyên." })
-  @Min(1)
-  @Max(100, { message: "Kích thước trang không được vượt quá 100." })
-  pageSize?: number;
-
   @ApiPropertyOptional({ enum: ["offset", "cursor"], default: "offset" })
   @IsOptional()
   @IsIn(["offset", "cursor"], {

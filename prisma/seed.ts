@@ -270,19 +270,50 @@ const rolePermissions: Record<string, readonly string[]> = {
 };
 async function main() {
   const production = process.env["NODE_ENV"] === "production";
-  const suppliedPassword = process.env["SEED_ADMIN_PASSWORD"];
+  const organizationCode = (
+    process.env["BOOTSTRAP_ORGANIZATION_CODE"] ?? "DICA"
+  )
+    .trim()
+    .toUpperCase();
+  const organizationName = (
+    process.env["BOOTSTRAP_ORGANIZATION_NAME"] ?? "DICA Demo"
+  ).trim();
+  const adminUsername = (process.env["BOOTSTRAP_ADMIN_USERNAME"] ?? "admin")
+    .trim()
+    .toLowerCase();
+  const adminDisplayName = (
+    process.env["BOOTSTRAP_ADMIN_DISPLAY_NAME"] ?? "Quản trị DICA"
+  ).trim();
+  const suppliedPassword = process.env["BOOTSTRAP_ADMIN_PASSWORD"]?.trim();
+  if (!/^[A-Z0-9_-]{2,50}$/.test(organizationCode))
+    throw new Error("BOOTSTRAP_ORGANIZATION_CODE không hợp lệ.");
+  if (!organizationName || organizationName.length > 200)
+    throw new Error("BOOTSTRAP_ORGANIZATION_NAME không hợp lệ.");
+  if (!/^[a-zA-Z0-9._-]{3,100}$/.test(adminUsername))
+    throw new Error("BOOTSTRAP_ADMIN_USERNAME không hợp lệ.");
+  if (!adminDisplayName || adminDisplayName.length > 200)
+    throw new Error("BOOTSTRAP_ADMIN_DISPLAY_NAME không hợp lệ.");
+  if (
+    suppliedPassword &&
+    (suppliedPassword.length < 12 ||
+      suppliedPassword.length > 200 ||
+      suppliedPassword.includes("replace"))
+  )
+    throw new Error(
+      "BOOTSTRAP_ADMIN_PASSWORD phải có 12-200 ký tự và không được là placeholder.",
+    );
   if (production && (!suppliedPassword || suppliedPassword.includes("replace")))
     throw new Error(
-      "Production bắt buộc cấu hình SEED_ADMIN_PASSWORD an toàn.",
+      "Production bắt buộc cấu hình BOOTSTRAP_ADMIN_PASSWORD an toàn.",
     );
   const password =
     suppliedPassword && !suppliedPassword.includes("replace")
       ? suppliedPassword
       : "DicaDemo#2026";
   const org = await db.organization.upsert({
-    where: { code: "DICA" },
+    where: { code: organizationCode },
     update: {},
-    create: { code: "DICA", name: "DICA Demo" },
+    create: { code: organizationCode, name: organizationName },
   });
   for (const code of SYSTEM_PERMISSIONS)
     await db.permission.upsert({
@@ -497,14 +528,14 @@ async function main() {
     where: {
       organizationId_username: {
         organizationId: org.id,
-        username: process.env["SEED_ADMIN_USERNAME"] ?? "admin",
+        username: adminUsername,
       },
     },
     update: { passwordHash: hash, active: true },
     create: {
       organizationId: org.id,
-      username: process.env["SEED_ADMIN_USERNAME"] ?? "admin",
-      displayName: "Quản trị DICA",
+      username: adminUsername,
+      displayName: adminDisplayName,
       passwordHash: hash,
     },
   });
@@ -578,7 +609,7 @@ async function main() {
     },
   });
   console.log(
-    "Seed demo hoàn tất. Tài khoản admin và supplier.a dùng mật khẩu SEED_ADMIN_PASSWORD (hoặc DicaDemo#2026 ở môi trường không production).",
+    `Seed demo hoàn tất cho tổ chức ${organizationCode}. Tài khoản ${adminUsername} và supplier.a dùng BOOTSTRAP_ADMIN_PASSWORD (hoặc DicaDemo#2026 ở môi trường không production).`,
   );
 }
 main().finally(() => db.$disconnect());

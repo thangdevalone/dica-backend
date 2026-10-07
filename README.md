@@ -35,13 +35,13 @@ Yêu cầu Node.js 22.22.3+, 24.15+ hoặc 26+ và PostgreSQL 17+. Có thể dù
 6. Tạo dữ liệu demo: `npm run db:seed`.
 7. Chạy API: `npm run start:dev`.
 
-Tài khoản demo: `admin` và `supplier.a`. Mật khẩu lấy từ `SEED_ADMIN_PASSWORD`; seed chỉ dùng mật khẩu mặc định `DicaDemo#2026` khi không phải production.
+Tài khoản demo lấy tên và mật khẩu từ `BOOTSTRAP_ADMIN_USERNAME` và `BOOTSTRAP_ADMIN_PASSWORD`; tài khoản nhà cung cấp là `supplier.a` và dùng cùng mật khẩu. Seed chỉ dùng mật khẩu mặc định `DicaDemo#2026` khi không phải production. Bộ biến `BOOTSTRAP_ORGANIZATION_*` và `BOOTSTRAP_ADMIN_*` được dùng thống nhất cho cả bootstrap production và seed demo/local.
 
 Seed được thiết kế để chạy lại an toàn bằng `npm run db:seed`. Nếu cần xóa toàn bộ dữ liệu local rồi dựng lại từ đầu, dùng `npx prisma migrate reset --force`; lệnh này chỉ nên chạy với database development vì sẽ xóa dữ liệu trước khi migrate và seed lại.
 
 `LOG_LEVEL` điều khiển mức log (`fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`). Client có thể gửi `x-request-id`; nếu hợp lệ server sẽ giữ nguyên, nếu không server tự sinh và trả lại trong header/response.
 
-Phân trang mặc định dùng `page=1&page_size=20`, tối đa 100 bản ghi. Client cũ vẫn có thể gửi `pageSize` nhưng tham số này đã deprecated. Với audit, ledger hoặc danh sách lớn, dùng `pagination_mode=cursor&page_size=50`; gửi `next_cursor` của response vào `cursor` ở request tiếp theo.
+Phân trang mặc định dùng `page=1&page_size=20`, tối đa 100 bản ghi. Với audit, ledger hoặc danh sách lớn, dùng `pagination_mode=cursor&page_size=50`; gửi `next_cursor` của response vào `cursor` ở request tiếp theo.
 
 ## Kiểm tra
 

@@ -27,7 +27,7 @@ export interface CursorPaginationMeta {
 export type PaginationMeta = OffsetPaginationMeta | CursorPaginationMeta;
 
 export function pageSize(query: PaginationDto): number {
-  return query.page_size ?? query.pageSize ?? 20;
+  return query.page_size ?? 20;
 }
 
 export function isCursorPagination(query: PaginationDto): boolean {

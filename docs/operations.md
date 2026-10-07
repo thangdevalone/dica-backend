@@ -32,7 +32,7 @@ Nếu database từ chối bản ghi audit sau khi thao tác hoàn tất, API gh
 
 ## Phân trang dữ liệu lớn
 
-Không endpoint danh sách quản trị nào trả toàn bộ dữ liệu theo mặc định. `page_size` mặc định 20 và tối đa 100; `pageSize` chỉ được giữ để tương thích client cũ.
+Không endpoint danh sách quản trị nào trả toàn bộ dữ liệu theo mặc định. `page_size` mặc định 20 và tối đa 100.
 
 Offset mode phù hợp màn hình cần nhảy tới một trang xác định:
 
