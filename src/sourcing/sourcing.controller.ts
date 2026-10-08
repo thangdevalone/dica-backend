@@ -16,6 +16,7 @@ import { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   BulkSourceRuleDto,
+  BulkEligibilityDto,
   EligibilityListQueryDto,
   GroupEligibilityListQueryDto,
   SourceRuleListQueryDto,
@@ -45,6 +46,14 @@ export class SourcingController {
   @RequirePermissions("eligibility.manage")
   ue(@CurrentUser() u: AuthUser, @Body() d: UpsertEligibilityDto) {
     return this.s.upsertEligibility(u, d);
+  }
+  @ApiEndpoint("Thiết lập hàng loạt quyền yêu cầu nguyên liệu cho bộ phận", {
+    adminWeb: true,
+  })
+  @Post("item-eligibility/bulk-update")
+  @RequirePermissions("eligibility.manage")
+  be(@CurrentUser() u: AuthUser, @Body() d: BulkEligibilityDto) {
+    return this.s.bulkEligibility(u, d);
   }
   @ApiEndpoint("Xem nhóm hàng được phép yêu cầu theo bộ phận", {
     audience: "both",

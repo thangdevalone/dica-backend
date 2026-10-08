@@ -18,6 +18,7 @@ import {
   OrderSourceType,
   Prisma,
   SourceType,
+  StockLocationType,
 } from "../generated/prisma/client.js";
 import type {
   CancelRequestDto,
@@ -384,7 +385,8 @@ export class RequestService {
           where: { id, organizationId: u.organizationId },
           include: {
             lines: { include: { ingredient: true } },
-            department: true,
+            facility: true,
+            department: { include: { stockLocation: true } },
           },
         });
         if (!r) this.notFound();
@@ -398,8 +400,15 @@ export class RequestService {
           DocumentStatus.SUBMITTED,
           d.expected_version,
         );
-        if (!r.department.stockLocationId)
-          this.invalid("Bộ phận nhận chưa có kho.");
+        if (
+          !r.facility.active ||
+          !r.department.active ||
+          !r.department.stockLocationId ||
+          !r.department.stockLocation?.active
+        )
+          this.invalid(
+            "Cơ sở/bộ phận nhận không hoạt động hoặc chưa có kho nhận hợp lệ.",
+          );
         const ingredientIds = r.lines.map((line) => line.ingredientId);
         const [
           currentRules,
@@ -412,6 +421,10 @@ export class RequestService {
               facilityId: r.facilityId,
               ingredientId: { in: ingredientIds },
             },
+            include: {
+              supplier: true,
+              sourceStockLocation: { include: { facility: true } },
+            },
           }),
           tx.itemEligibility.findMany({
             where: {
@@ -419,7 +432,11 @@ export class RequestService {
               departmentId: r.departmentId,
               ingredientId: { in: ingredientIds },
             },
-            select: { ingredientId: true, active: true },
+            select: {
+              ingredientId: true,
+              active: true,
+              maxQuantityPerRequest: true,
+            },
           }),
           tx.groupEligibility.findMany({
             where: {
@@ -431,7 +448,10 @@ export class RequestService {
                 ingredients: { some: { id: { in: ingredientIds } } },
               },
             },
-            select: { ingredientGroupId: true },
+            select: {
+              ingredientGroupId: true,
+              maxQuantityPerRequest: true,
+            },
           }),
           tx.supplierIngredient.findMany({
             where: {
@@ -441,6 +461,9 @@ export class RequestService {
                 ),
               },
               ingredientId: { in: ingredientIds },
+              active: true,
+              supplier: { active: true },
+              ingredient: { active: true },
             },
           }),
         ]);
@@ -448,10 +471,13 @@ export class RequestService {
           currentRules.map((rule) => [rule.ingredientId, rule]),
         );
         const eligibilityByIngredient = new Map(
-          currentEligibilities.map((item) => [item.ingredientId, item.active]),
+          currentEligibilities.map((item) => [item.ingredientId, item]),
         );
-        const eligibleGroups = new Set(
-          currentGroupEligibilities.map((item) => item.ingredientGroupId),
+        const eligibilityByGroup = new Map(
+          currentGroupEligibilities.map((item) => [
+            item.ingredientGroupId,
+            item,
+          ]),
         );
         const priceBySupplierAndIngredient = new Map(
           supplierPrices.map((price) => [
@@ -464,17 +490,35 @@ export class RequestService {
           const directEligibility = eligibilityByIngredient.get(
             line.ingredientId,
           );
+          const groupEligibility = line.ingredient.groupId
+            ? eligibilityByGroup.get(line.ingredient.groupId)
+            : undefined;
           const isEligible =
             directEligibility !== undefined
-              ? directEligibility
-              : Boolean(
-                  line.ingredient.groupId &&
-                  eligibleGroups.has(line.ingredient.groupId),
-                );
+              ? directEligibility.active
+              : Boolean(groupEligibility);
+          const maxQuantity =
+            directEligibility !== undefined
+              ? directEligibility.maxQuantityPerRequest
+              : (groupEligibility?.maxQuantityPerRequest ?? null);
+          const sourceAvailable =
+            current?.active === true &&
+            (current.sourceType === SourceType.STOCK
+              ? current.sourceStockLocation?.active === true &&
+                current.sourceStockLocation.type ===
+                  StockLocationType.PHYSICAL &&
+                current.sourceStockLocation.facility.active === true
+              : current.supplier?.active === true &&
+                priceBySupplierAndIngredient.has(
+                  `${current.supplierId}:${line.ingredientId}`,
+                ));
           if (
             !current ||
             current.revision !== line.sourceRuleRevision ||
-            !isEligible
+            !line.ingredient.active ||
+            !isEligible ||
+            !sourceAvailable ||
+            (maxQuantity !== null && line.baseQuantity.gt(maxQuantity))
           )
             throw new ApiException(
               ErrorCode.VERSION_CONFLICT,
@@ -609,7 +653,7 @@ export class RequestService {
         if (guard.count !== 1) this.version();
         await tx.approvalEvent.create({
           data: {
-            requestId: u.requestId,
+            requestId: id,
             actorId: u.id,
             decision: ApprovalDecision.REJECTED,
             policy: "MANAGER_APPROVAL",

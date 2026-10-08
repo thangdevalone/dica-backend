@@ -66,3 +66,62 @@ test("cấu hình trực tiếp không giới hạn ghi đè giới hạn của 
   assert.equal(result.data[0]?.grantType, "INGREDIENT");
   assert.equal(result.data[0]?.maxQuantityPerRequest, null);
 });
+
+test("cập nhật quyền xin hàng theo lô kiểm tra danh mục một lần và lưu đủ dữ liệu", async () => {
+  const facilityId = "00000000-0000-4000-8000-000000000020";
+  const departmentId = "00000000-0000-4000-8000-000000000021";
+  const ingredientIds = [
+    "00000000-0000-4000-8000-000000000022",
+    "00000000-0000-4000-8000-000000000023",
+  ];
+  let departmentQueries = 0;
+  let ingredientQueries = 0;
+  const saved: string[] = [];
+  const tx = {
+    department: {
+      findMany: async () => {
+        departmentQueries += 1;
+        return [
+          {
+            id: departmentId,
+            facilityId,
+            active: true,
+            facility: { active: true },
+          },
+        ];
+      },
+    },
+    ingredient: {
+      findMany: async () => {
+        ingredientQueries += 1;
+        return ingredientIds.map((id) => ({ id, active: true }));
+      },
+    },
+    itemEligibility: {
+      upsert: async ({ create }: { create: { ingredientId: string } }) => {
+        saved.push(create.ingredientId);
+        return create;
+      },
+    },
+  };
+  const db = {
+    $transaction: async (run: (client: typeof tx) => unknown) => run(tx),
+  };
+  const scope = { assertAccess: () => undefined };
+  const service = new SourcingService(db as never, scope as never);
+
+  const result = await service.bulkEligibility(user, {
+    items: ingredientIds.map((ingredient_id) => ({
+      facility_id: facilityId,
+      department_id: departmentId,
+      ingredient_id,
+      max_quantity_per_request: null,
+      active: true,
+    })),
+  });
+
+  assert.equal(departmentQueries, 1);
+  assert.equal(ingredientQueries, 1);
+  assert.deepEqual(saved, ingredientIds);
+  assert.equal(result.meta.total, 2);
+});

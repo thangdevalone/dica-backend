@@ -92,6 +92,20 @@ export class UpsertEligibilityDto {
   active?: boolean;
 }
 
+export class BulkEligibilityDto {
+  @ApiProperty({
+    type: () => [UpsertEligibilityDto],
+    minItems: 1,
+    maxItems: 500,
+  })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => UpsertEligibilityDto)
+  items!: UpsertEligibilityDto[];
+}
+
 export class UpsertGroupEligibilityDto {
   @ApiProperty({ format: "uuid", description: "Mã cơ sở" })
   @IsUUID()

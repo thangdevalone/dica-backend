@@ -9,9 +9,14 @@ import {
   paginateById,
 } from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
-import { Prisma, SourceType } from "../generated/prisma/client.js";
+import {
+  Prisma,
+  SourceType,
+  StockLocationType,
+} from "../generated/prisma/client.js";
 import type {
   BulkSourceRuleDto,
+  BulkEligibilityDto,
   EligibilityListQueryDto,
   GroupEligibilityListQueryDto,
   SourceRuleListQueryDto,
@@ -306,7 +311,7 @@ export class SourcingService {
         where: {
           id: d.ingredient_group_id,
           organizationId: u.organizationId,
-          active: true,
+          ...(d.active === false ? {} : { active: true }),
         },
       }),
     ]);
@@ -358,20 +363,128 @@ export class SourcingService {
       facilityId: d.facility_id,
       departmentId: d.department_id,
     });
+    const data = await this.saveEligibility(this.db, u, d);
+    return { data, message: "Cập nhật quyền xin hàng thành công." };
+  }
+
+  async bulkEligibility(u: AuthUser, d: BulkEligibilityDto) {
+    const keys = d.items.map(
+      (item) =>
+        `${item.facility_id}:${item.department_id}:${item.ingredient_id}`,
+    );
+    if (new Set(keys).size !== keys.length)
+      this.invalid("Danh sách có nguyên liệu được cấu hình trùng.");
+    d.items.forEach((item) =>
+      this.scope.assertAccess(u, "eligibility.manage", {
+        facilityId: item.facility_id,
+        departmentId: item.department_id,
+      }),
+    );
+    const data = await this.db.$transaction(async (tx) => {
+      const departmentPairs = [
+        ...new Map(
+          d.items.map((item) => [
+            `${item.facility_id}:${item.department_id}`,
+            { facilityId: item.facility_id, id: item.department_id },
+          ]),
+        ).values(),
+      ];
+      const ingredientIds = [
+        ...new Set(d.items.map((item) => item.ingredient_id)),
+      ];
+      const [departments, ingredients] = await Promise.all([
+        tx.department.findMany({
+          where: {
+            OR: departmentPairs,
+            facility: { organizationId: u.organizationId },
+          },
+          select: {
+            id: true,
+            facilityId: true,
+            active: true,
+            facility: { select: { active: true } },
+          },
+        }),
+        tx.ingredient.findMany({
+          where: {
+            id: { in: ingredientIds },
+            organizationId: u.organizationId,
+          },
+          select: { id: true, active: true },
+        }),
+      ]);
+      const departmentByPair = new Map(
+        departments.map((department) => [
+          `${department.facilityId}:${department.id}`,
+          department,
+        ]),
+      );
+      const ingredientById = new Map(
+        ingredients.map((ingredient) => [ingredient.id, ingredient]),
+      );
+      for (const item of d.items) {
+        const department = departmentByPair.get(
+          `${item.facility_id}:${item.department_id}`,
+        );
+        const ingredient = ingredientById.get(item.ingredient_id);
+        if (
+          !department ||
+          !ingredient ||
+          (item.active !== false &&
+            (!department.active ||
+              !department.facility.active ||
+              !ingredient.active))
+        )
+          this.invalid(
+            "Cơ sở, bộ phận hoặc nguyên liệu không hợp lệ hay đã ngừng hoạt động.",
+          );
+        this.eligibilityMaxQuantity(item);
+      }
+      const result = [];
+      for (const item of d.items)
+        result.push(await this.persistEligibility(tx, item));
+      return result;
+    });
+    return {
+      data,
+      message: `Cập nhật ${data.length} quyền xin hàng thành công.`,
+      meta: { total: data.length },
+    };
+  }
+
+  private async saveEligibility(
+    tx: Prisma.TransactionClient | PrismaService,
+    u: AuthUser,
+    d: UpsertEligibilityDto,
+  ) {
     const [dep, item] = await Promise.all([
-      this.db.department.count({
+      tx.department.count({
         where: {
           id: d.department_id,
           facilityId: d.facility_id,
-          facility: { organizationId: u.organizationId },
+          ...(d.active === false ? {} : { active: true }),
+          facility: {
+            organizationId: u.organizationId,
+            ...(d.active === false ? {} : { active: true }),
+          },
         },
       }),
-      this.db.ingredient.count({
-        where: { id: d.ingredient_id, organizationId: u.organizationId },
+      tx.ingredient.count({
+        where: {
+          id: d.ingredient_id,
+          organizationId: u.organizationId,
+          ...(d.active === false ? {} : { active: true }),
+        },
       }),
     ]);
     if (!dep || !item)
-      this.invalid("Cơ sở, bộ phận hoặc nguyên liệu không hợp lệ.");
+      this.invalid(
+        "Cơ sở, bộ phận hoặc nguyên liệu không hợp lệ hay đã ngừng hoạt động.",
+      );
+    return this.persistEligibility(tx, d);
+  }
+
+  private eligibilityMaxQuantity(d: UpsertEligibilityDto) {
     const maxQuantity =
       d.max_quantity_per_request === null ||
       d.max_quantity_per_request === undefined
@@ -379,7 +492,15 @@ export class SourcingService {
         : new Prisma.Decimal(d.max_quantity_per_request);
     if (maxQuantity instanceof Prisma.Decimal && !maxQuantity.gt(0))
       this.invalid("Giới hạn số lượng gọi phải lớn hơn 0.");
-    const data = await this.db.itemEligibility.upsert({
+    return maxQuantity;
+  }
+
+  private persistEligibility(
+    tx: Prisma.TransactionClient | PrismaService,
+    d: UpsertEligibilityDto,
+  ) {
+    const maxQuantity = this.eligibilityMaxQuantity(d);
+    return tx.itemEligibility.upsert({
       where: {
         facilityId_departmentId_ingredientId: {
           facilityId: d.facility_id,
@@ -403,7 +524,6 @@ export class SourcingService {
         active: d.active ?? true,
       },
     });
-    return { data, message: "Cập nhật quyền xin hàng thành công." };
   }
   async rules(u: AuthUser, q: SourceRuleListQueryDto) {
     const ids = this.scope.facilityIds(u, "source_rule.read");
@@ -506,8 +626,117 @@ export class SourcingService {
       }),
     );
     const data = await this.db.$transaction(async (tx) => {
+      if (d.items.some((item) => !this.validSourceShape(item)))
+        this.invalid(
+          "Nguồn kho và nguồn nhà cung ứng phải được khai báo đúng loại.",
+        );
+      const facilityIds = [...new Set(d.items.map((item) => item.facility_id))];
+      const ingredientIds = [
+        ...new Set(d.items.map((item) => item.ingredient_id)),
+      ];
+      const locationIds = [
+        ...new Set(
+          d.items.flatMap((item) =>
+            item.source_stock_location_id
+              ? [item.source_stock_location_id]
+              : [],
+          ),
+        ),
+      ];
+      const supplierIds = [
+        ...new Set(
+          d.items.flatMap((item) =>
+            item.supplier_id ? [item.supplier_id] : [],
+          ),
+        ),
+      ];
+      const [facilities, ingredients, locations, suppliers, links, oldRules] =
+        await Promise.all([
+          tx.facility.findMany({
+            where: {
+              id: { in: facilityIds },
+              organizationId: u.organizationId,
+              active: true,
+            },
+            select: { id: true },
+          }),
+          tx.ingredient.findMany({
+            where: {
+              id: { in: ingredientIds },
+              organizationId: u.organizationId,
+              active: true,
+            },
+            select: { id: true },
+          }),
+          tx.stockLocation.findMany({
+            where: {
+              id: { in: locationIds },
+              active: true,
+              type: StockLocationType.PHYSICAL,
+              facility: { organizationId: u.organizationId, active: true },
+            },
+            select: { id: true },
+          }),
+          tx.supplier.findMany({
+            where: {
+              id: { in: supplierIds },
+              organizationId: u.organizationId,
+              active: true,
+            },
+            select: { id: true },
+          }),
+          tx.supplierIngredient.findMany({
+            where: {
+              active: true,
+              supplierId: { in: supplierIds },
+              ingredientId: { in: ingredientIds },
+              supplier: { active: true, organizationId: u.organizationId },
+              ingredient: { active: true, organizationId: u.organizationId },
+            },
+            select: { supplierId: true, ingredientId: true },
+          }),
+          tx.sourceRule.findMany({
+            where: {
+              OR: d.items.map((item) => ({
+                facilityId: item.facility_id,
+                ingredientId: item.ingredient_id,
+              })),
+            },
+          }),
+        ]);
+      const facilitySet = new Set(facilities.map((item) => item.id));
+      const ingredientSet = new Set(ingredients.map((item) => item.id));
+      const locationSet = new Set(locations.map((item) => item.id));
+      const supplierSet = new Set(suppliers.map((item) => item.id));
+      const linkSet = new Set(
+        links.map((item) => `${item.supplierId}:${item.ingredientId}`),
+      );
+      const oldByKey = new Map(
+        oldRules.map((item) => [
+          `${item.facilityId}:${item.ingredientId}`,
+          item,
+        ]),
+      );
+      for (const item of d.items) {
+        const validBase =
+          facilitySet.has(item.facility_id) &&
+          ingredientSet.has(item.ingredient_id);
+        const validSource =
+          item.source_type === SourceType.STOCK
+            ? locationSet.has(item.source_stock_location_id!)
+            : supplierSet.has(item.supplier_id!) &&
+              linkSet.has(`${item.supplier_id}:${item.ingredient_id}`);
+        if (!validBase || !validSource)
+          this.invalid("Nguồn cấp không hợp lệ hoặc đã ngừng hoạt động.");
+      }
       const out = [];
-      for (const x of d.items) out.push(await this.save(tx, u, x));
+      for (const item of d.items)
+        out.push(
+          await this.persistRule(tx, u, item, {
+            value:
+              oldByKey.get(`${item.facility_id}:${item.ingredient_id}`) ?? null,
+          }),
+        );
       return out;
     });
     return {
@@ -521,11 +750,7 @@ export class SourcingService {
     u: AuthUser,
     d: UpsertSourceRuleDto,
   ) {
-    const shape =
-      d.source_type === SourceType.STOCK
-        ? Boolean(d.source_stock_location_id && !d.supplier_id)
-        : Boolean(d.supplier_id && !d.source_stock_location_id);
-    if (!shape)
+    if (!this.validSourceShape(d))
       this.invalid(
         "Nguồn kho và nguồn nhà cung ứng phải được khai báo đúng loại.",
       );
@@ -549,7 +774,8 @@ export class SourcingService {
             where: {
               id: d.source_stock_location_id,
               active: true,
-              facility: { organizationId: u.organizationId },
+              type: StockLocationType.PHYSICAL,
+              facility: { organizationId: u.organizationId, active: true },
             },
           })
         : 0,
@@ -581,15 +807,32 @@ export class SourcingService {
       }))
     )
       this.invalid("Nhà cung ứng chưa được liên kết với nguyên liệu.");
-    const old = await tx.sourceRule.findUnique({
-        where: {
-          facilityId_ingredientId: {
-            facilityId: d.facility_id,
-            ingredientId: d.ingredient_id,
+    return this.persistRule(tx, u, d);
+  }
+
+  private validSourceShape(d: UpsertSourceRuleDto) {
+    return d.source_type === SourceType.STOCK
+      ? Boolean(d.source_stock_location_id && !d.supplier_id)
+      : Boolean(d.supplier_id && !d.source_stock_location_id);
+  }
+
+  private async persistRule(
+    tx: Prisma.TransactionClient,
+    u: AuthUser,
+    d: UpsertSourceRuleDto,
+    existing?: { value: Awaited<ReturnType<typeof tx.sourceRule.findUnique>> },
+  ) {
+    const old = existing
+      ? existing.value
+      : await tx.sourceRule.findUnique({
+          where: {
+            facilityId_ingredientId: {
+              facilityId: d.facility_id,
+              ingredientId: d.ingredient_id,
+            },
           },
-        },
-      }),
-      revision = (old?.revision ?? 0) + 1;
+        });
+    const revision = (old?.revision ?? 0) + 1;
     const data = await tx.sourceRule.upsert({
       where: {
         facilityId_ingredientId: {

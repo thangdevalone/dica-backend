@@ -85,20 +85,20 @@ Các tuyến trên có luôn phải qua Quản lý tổng duyệt không? Có ng
 
 Vui lòng xác nhận người được thực hiện từng nghiệp vụ:
 
-| Nghiệp vụ | Vai trò được thực hiện |
-| --- | --- |
-| Tạo phiếu xin hàng |  |
-| Sửa/hủy phiếu |  |
-| Duyệt/từ chối/yêu cầu sửa |  |
-| Xuất/giao hàng |  |
-| Nhận và kiểm hàng |  |
-| Xử lý thiếu/thừa |  |
-| Đóng phần thiếu |  |
-| Kiểm kê |  |
-| Xác nhận báo hỏng |  |
-| Xem giá/công nợ |  |
-| Cập nhật thanh toán |  |
-| Xem báo cáo |  |
+| Nghiệp vụ                 | Vai trò được thực hiện |
+| ------------------------- | ---------------------- |
+| Tạo phiếu xin hàng        |                        |
+| Sửa/hủy phiếu             |                        |
+| Duyệt/từ chối/yêu cầu sửa |                        |
+| Xuất/giao hàng            |                        |
+| Nhận và kiểm hàng         |                        |
+| Xử lý thiếu/thừa          |                        |
+| Đóng phần thiếu           |                        |
+| Kiểm kê                   |                        |
+| Xác nhận báo hỏng         |                        |
+| Xem giá/công nợ           |                        |
+| Cập nhật thanh toán       |                        |
+| Xem báo cáo               |                        |
 
 Quản lý tổng và Chủ sẽ duyệt trên Web Admin, app Mobile hay cả hai?
 

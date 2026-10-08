@@ -178,10 +178,18 @@ export class CatalogService {
     this.scope.assertAccess(u, "supplier_ingredient.manage", {});
     const [s, i] = await Promise.all([
       this.db.supplier.count({
-        where: { id: d.supplier_id, organizationId: u.organizationId },
+        where: {
+          id: d.supplier_id,
+          organizationId: u.organizationId,
+          active: true,
+        },
       }),
       this.db.ingredient.count({
-        where: { id: d.ingredient_id, organizationId: u.organizationId },
+        where: {
+          id: d.ingredient_id,
+          organizationId: u.organizationId,
+          active: true,
+        },
       }),
     ]);
     if (!s || !i) this.invalid();
@@ -414,14 +422,21 @@ export class CatalogService {
       });
       if (!group) this.invalid();
     }
-    const data = await this.db.ingredient.update({
-      where: { id },
-      data: {
-        ...(d.name !== undefined ? { name: d.name } : {}),
-        ...(d.group_id !== undefined ? { groupId: d.group_id } : {}),
-        ...(d.active !== undefined ? { active: d.active } : {}),
-      },
-      include: { baseUnit: true, group: true },
+    const data = await this.db.$transaction(async (tx) => {
+      if (d.active === false)
+        await tx.supplierIngredient.updateMany({
+          where: { ingredientId: id, isPreferred: true },
+          data: { isPreferred: false },
+        });
+      return tx.ingredient.update({
+        where: { id },
+        data: {
+          ...(d.name !== undefined ? { name: d.name } : {}),
+          ...(d.group_id !== undefined ? { groupId: d.group_id } : {}),
+          ...(d.active !== undefined ? { active: d.active } : {}),
+        },
+        include: { baseUnit: true, group: true },
+      });
     });
     return { data, message: "Cập nhật nguyên liệu thành công." };
   }
@@ -429,14 +444,21 @@ export class CatalogService {
   async updateSupplier(u: AuthUser, id: string, d: D.UpdateSupplierDto) {
     this.scope.assertAccess(u, "supplier.manage", {});
     await this.assertOwned("supplier", u, id);
-    const data = await this.db.supplier.update({
-      where: { id },
-      data: {
-        ...(d.name !== undefined ? { name: d.name } : {}),
-        ...(d.phone !== undefined ? { phone: d.phone } : {}),
-        ...(d.email !== undefined ? { email: d.email || null } : {}),
-        ...(d.active !== undefined ? { active: d.active } : {}),
-      },
+    const data = await this.db.$transaction(async (tx) => {
+      if (d.active === false)
+        await tx.supplierIngredient.updateMany({
+          where: { supplierId: id, isPreferred: true },
+          data: { isPreferred: false },
+        });
+      return tx.supplier.update({
+        where: { id },
+        data: {
+          ...(d.name !== undefined ? { name: d.name } : {}),
+          ...(d.phone !== undefined ? { phone: d.phone } : {}),
+          ...(d.email !== undefined ? { email: d.email || null } : {}),
+          ...(d.active !== undefined ? { active: d.active } : {}),
+        },
+      });
     });
     return { data, message: "Cập nhật nhà cung ứng thành công." };
   }
@@ -449,11 +471,18 @@ export class CatalogService {
     this.scope.assertAccess(u, "supplier_ingredient.manage", {});
     const existing = await this.db.supplierIngredient.findFirst({
       where: { id, supplier: { organizationId: u.organizationId } },
+      include: {
+        supplier: { select: { active: true } },
+        ingredient: { select: { active: true } },
+      },
     });
     if (!existing) this.notFound();
     if (
       d.is_preferred &&
-      (d.active === false || (!existing.active && d.active !== true))
+      (d.active === false ||
+        (!existing.active && d.active !== true) ||
+        !existing.supplier.active ||
+        !existing.ingredient.active)
     )
       this.invalidMessage("Nhà cung cấp ưu tiên phải đang hoạt động.");
     const data = await this.db.$transaction(async (tx) => {
