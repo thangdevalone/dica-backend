@@ -427,6 +427,7 @@ export class RequestService {
               departmentId: r.departmentId,
               active: true,
               ingredientGroup: {
+                active: true,
                 ingredients: { some: { id: { in: ingredientIds } } },
               },
             },
@@ -772,6 +773,7 @@ export class RequestService {
             departmentId,
             active: true,
             ingredientGroup: {
+              active: true,
               ingredients: { some: { id: { in: ingredientIds } } },
             },
           },

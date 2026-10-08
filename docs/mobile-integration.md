@@ -1,6 +1,8 @@
 # Hướng dẫn tích hợp Mobile DICA
 
-Tài liệu bàn giao cho mobile dev, bám theo flow trong `Untitled.fig` và contract backend hiện tại. Swagger là nguồn schema chi tiết cuối cùng tại `/docs`; OpenAPI JSON tại `/openapi.json`. Chỉ tích hợp endpoint mang nhãn `[MOBILE]` hoặc `[MOBILE + ADMIN WEB]`.
+Tài liệu bàn giao cho mobile dev, bám theo `new-flow.md` và contract backend hiện tại. Swagger là nguồn schema chi tiết cuối cùng tại `/docs`; OpenAPI JSON tại `/openapi.json`. Chỉ tích hợp endpoint mang nhãn `[MOBILE]` hoặc `[MOBILE + ADMIN WEB]`.
+
+Workspace hiện tại không có source code Mobile. Tài liệu này xác nhận contract tích hợp cần triển khai, không xác nhận rằng các màn hình Mobile đã được lập trình hoặc kiểm thử end-to-end.
 
 Mỗi operation trong OpenAPI có `x-dica-audience` để lọc client và `x-dica-response-schema` để biết model lõi của `data`. Request body, query, enum, response envelope, pagination và error response đều có schema; có thể dùng `/openapi.json` để generate client/model.
 
@@ -150,7 +152,7 @@ Sửa `DRAFT`: `PUT /requests/{id}`, gửi lại các trường trên và thêm 
 
 Nếu nhận `SOURCE_NOT_CONFIGURED` hoặc `SOURCE_UNAVAILABLE`, hiển thị tên/dòng lỗi và yêu cầu liên hệ quản lý; Mobile không tự chọn nguồn thay thế.
 
-Sau submit, Mobile theo dõi detail/list và notification. `approve`/`reject` do Admin Web thực hiện. Với phiếu `REJECTED`, gọi `POST /requests/{id}/revise` bằng body giống update; với phiếu còn được phép hủy, gọi `/cancel` kèm `expected_version` và `reason`.
+Sau submit, Mobile theo dõi detail/list và notification. `approve`/`reject` hiện do Admin Web thực hiện. Với phiếu `REJECTED`, gọi `POST /requests/{id}/revise` bằng body giống update; với phiếu còn được phép hủy, gọi `/cancel` kèm `expected_version` và `note`.
 
 ## 5. Flow Xuất/Nhận hàng
 
@@ -352,7 +354,7 @@ POST /damage-reports/{id}/submit
 { "expected_version": 1 }
 ```
 
-Submit chưa trừ tồn. Chỉ sau khi người có quyền xác nhận trên Web, phiếu thành `CONFIRMED` và ledger mới ghi giảm tồn.
+Submit chưa trừ tồn. API xác nhận báo hỏng hiện bị chặn ở production vì chính sách chưa được khách duyệt; ngay cả policy demo cũng chỉ chuyển phiếu sang `CONFIRMED`, chưa ghi giảm tồn kho. Mobile không được tự trừ tồn hoặc hiển thị rằng tồn đã được điều chỉnh.
 
 Ảnh báo hỏng dùng cùng attachment API với `resource_type=DAMAGE_REPORT` và `resource_id=<damage-report-uuid>`.
 
@@ -383,7 +385,7 @@ Sau khi Firebase Messaging cấp hoặc refresh registration token, đăng ký t
 - Android phải tạo notification channel id `dica_operations` (hoặc giá trị backend cấu hình tại `FCM_ANDROID_CHANNEL_ID`).
 - iOS phải xin quyền notification, đăng ký APNs/FCM token và cấu hình APNs authentication key cho iOS app trong Firebase Console. Backend vẫn dùng cùng Firebase service account, không cần thêm private key APNs vào `.env`.
 - Payload data gồm `notification_id`, `resource_type`, `resource_id`, `route`. Khi người dùng chạm push, ưu tiên điều hướng theo `resource_type/resource_id`; luôn tải detail lại từ API và không tin nội dung push làm dữ liệu nghiệp vụ.
-- Các sự kiện đang phát push: yêu cầu được duyệt/từ chối, điều chuyển chờ duyệt/được duyệt/bị từ chối, nhận hàng sai lệch, kiểm kê có chênh lệch, báo hỏng chờ xử lý/đã xác nhận.
+- Các sự kiện đang phát push: yêu cầu được duyệt/từ chối, đơn mới cho nhà cung cấp, điều chuyển chờ duyệt/được duyệt/bị từ chối, nhận hàng sai lệch, kiểm kê có chênh lệch, báo hỏng chờ xử lý/đã xác nhận.
 
 Vẫn poll `GET /notifications` khi app foreground/resume vì push chỉ là tín hiệu best-effort. Backend luôn lưu notification trong database trước rồi mới gửi FCM; FCM lỗi không làm rollback nghiệp vụ.
 

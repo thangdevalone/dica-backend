@@ -190,9 +190,9 @@ export class SourcingService {
           departmentId: q.department_id!,
           ingredientId: ingredient.id,
           maxQuantityPerRequest:
-            direct?.maxQuantityPerRequest ??
-            groupGrant?.maxQuantityPerRequest ??
-            null,
+            direct !== undefined
+              ? direct.maxQuantityPerRequest
+              : (groupGrant?.maxQuantityPerRequest ?? null),
           active,
           grantType: direct ? "INGREDIENT" : "GROUP",
           groupEligibilityId: direct ? null : (groupGrant?.id ?? null),
@@ -306,6 +306,7 @@ export class SourcingService {
         where: {
           id: d.ingredient_group_id,
           organizationId: u.organizationId,
+          active: true,
         },
       }),
     ]);
