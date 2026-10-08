@@ -441,13 +441,23 @@ async function main() {
     );
   const supplierA = await db.supplier.upsert({
     where: { organizationId_code: { organizationId: org.id, code: "SUP-A" } },
-    update: {},
-    create: { organizationId: org.id, code: "SUP-A", name: "Nhà cung ứng A" },
+    update: { phone: "0900000001" },
+    create: {
+      organizationId: org.id,
+      code: "SUP-A",
+      name: "Nhà cung ứng A",
+      phone: "0900000001",
+    },
   });
   const supplierB = await db.supplier.upsert({
     where: { organizationId_code: { organizationId: org.id, code: "SUP-B" } },
-    update: {},
-    create: { organizationId: org.id, code: "SUP-B", name: "Nhà cung ứng B" },
+    update: { phone: "0900000002" },
+    create: {
+      organizationId: org.id,
+      code: "SUP-B",
+      name: "Nhà cung ứng B",
+      phone: "0900000002",
+    },
   });
   await db.supplierIngredient.upsert({
     where: {
@@ -456,11 +466,12 @@ async function main() {
         ingredientId: rice.id,
       },
     },
-    update: {},
+    update: { isPreferred: true },
     create: {
       supplierId: supplierA.id,
       ingredientId: rice.id,
       referencePrice: "18000",
+      isPreferred: true,
     },
   });
   await db.supplierIngredient.upsert({

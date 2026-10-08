@@ -13,8 +13,10 @@ import { Prisma, SourceType } from "../generated/prisma/client.js";
 import type {
   BulkSourceRuleDto,
   EligibilityListQueryDto,
+  GroupEligibilityListQueryDto,
   SourceRuleListQueryDto,
   UpsertEligibilityDto,
+  UpsertGroupEligibilityDto,
   UpsertSourceRuleDto,
 } from "./sourcing.dto.js";
 @Injectable()
@@ -24,6 +26,7 @@ export class SourcingService {
     private scope: ScopeService,
   ) {}
   async eligibility(u: AuthUser, q: EligibilityListQueryDto) {
+    if (q.effective) return this.effectiveEligibility(u, q);
     const access = this.scope.constraintsFor(u, "eligibility.read", [
       "facilityId",
       "departmentId",
@@ -94,6 +97,259 @@ export class SourcingService {
       data,
       message: "Lấy danh sách hàng được phép xin thành công.",
       meta,
+    };
+  }
+
+  private async effectiveEligibility(u: AuthUser, q: EligibilityListQueryDto) {
+    if (!q.facility_id || !q.department_id)
+      this.invalid("Danh sách quyền hiệu lực bắt buộc có cơ sở và bộ phận.");
+    this.scope.assertAccess(u, "eligibility.read", {
+      facilityId: q.facility_id,
+      departmentId: q.department_id,
+    });
+    const scope = {
+      facilityId: q.facility_id,
+      departmentId: q.department_id,
+    };
+    const search = normalizedSearch(q);
+    const where: Prisma.IngredientWhereInput = {
+      organizationId: u.organizationId,
+      active: true,
+      ...(q.ingredient_id ? { id: q.ingredient_id } : {}),
+      AND: [
+        {
+          OR: [
+            { eligibilities: { some: { ...scope, active: true } } },
+            {
+              AND: [
+                { eligibilities: { none: scope } },
+                {
+                  group: {
+                    is: {
+                      active: true,
+                      eligibilities: { some: { ...scope, active: true } },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        ...(search
+          ? [
+              {
+                OR: [
+                  { name: { contains: search, mode: "insensitive" as const } },
+                  { code: { contains: search, mode: "insensitive" as const } },
+                  {
+                    group: {
+                      is: {
+                        name: {
+                          contains: search,
+                          mode: "insensitive" as const,
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    };
+    const { data: ingredients, meta } = await paginateById(
+      q,
+      ({ skip, take, cursorId }) =>
+        this.db.ingredient.findMany({
+          where,
+          include: {
+            baseUnit: true,
+            eligibilities: { where: scope },
+            group: {
+              include: {
+                eligibilities: { where: { ...scope, active: true } },
+              },
+            },
+          },
+          orderBy: [{ id: "asc" }],
+          ...(skip !== undefined ? { skip } : {}),
+          take,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      () => this.db.ingredient.count({ where }),
+      { searchHandled: true },
+    );
+    const data = ingredients
+      .map((ingredient) => {
+        const direct = ingredient.eligibilities[0];
+        const groupGrant = ingredient.group?.eligibilities[0];
+        const active = direct?.active ?? groupGrant?.active ?? false;
+        return {
+          id: direct?.id ?? ingredient.id,
+          facilityId: q.facility_id!,
+          departmentId: q.department_id!,
+          ingredientId: ingredient.id,
+          maxQuantityPerRequest:
+            direct?.maxQuantityPerRequest ??
+            groupGrant?.maxQuantityPerRequest ??
+            null,
+          active,
+          grantType: direct ? "INGREDIENT" : "GROUP",
+          groupEligibilityId: direct ? null : (groupGrant?.id ?? null),
+          ingredient: {
+            ...ingredient,
+            eligibilities: undefined,
+            group: ingredient.group
+              ? { ...ingredient.group, eligibilities: undefined }
+              : null,
+          },
+        };
+      })
+      .filter((item) => item.active);
+    return {
+      data,
+      message: "Lấy danh sách hàng được phép yêu cầu có hiệu lực thành công.",
+      meta,
+    };
+  }
+
+  async groupEligibility(u: AuthUser, q: GroupEligibilityListQueryDto) {
+    const access = this.scope.constraintsFor(u, "eligibility.read", [
+      "facilityId",
+      "departmentId",
+    ]);
+    const search = normalizedSearch(q);
+    const where: Prisma.GroupEligibilityWhereInput = {
+      facility: { organizationId: u.organizationId },
+      ...(q.facility_id ? { facilityId: q.facility_id } : {}),
+      ...(q.department_id ? { departmentId: q.department_id } : {}),
+      ...(q.ingredient_group_id
+        ? { ingredientGroupId: q.ingredient_group_id }
+        : {}),
+      AND: [
+        ...(access
+          ? [
+              {
+                OR: access.map((item) => ({
+                  ...(item.facilityId ? { facilityId: item.facilityId } : {}),
+                  ...(item.departmentId
+                    ? { departmentId: item.departmentId }
+                    : {}),
+                })),
+              },
+            ]
+          : []),
+        ...(search
+          ? [
+              {
+                OR: [
+                  {
+                    ingredientGroup: {
+                      name: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                  {
+                    ingredientGroup: {
+                      code: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                  {
+                    department: {
+                      name: { contains: search, mode: "insensitive" as const },
+                    },
+                  },
+                ],
+              },
+            ]
+          : []),
+      ],
+    };
+    const { data, meta } = await paginateById(
+      q,
+      ({ skip, take, cursorId }) =>
+        this.db.groupEligibility.findMany({
+          where,
+          include: {
+            facility: true,
+            department: true,
+            ingredientGroup: true,
+          },
+          orderBy: [{ id: "asc" }],
+          ...(skip !== undefined ? { skip } : {}),
+          take,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      () => this.db.groupEligibility.count({ where }),
+      { searchHandled: true },
+    );
+    return {
+      data,
+      message: "Lấy danh sách nhóm hàng được phép yêu cầu thành công.",
+      meta,
+    };
+  }
+
+  async upsertGroupEligibility(u: AuthUser, d: UpsertGroupEligibilityDto) {
+    this.scope.assertAccess(u, "eligibility.manage", {
+      facilityId: d.facility_id,
+      departmentId: d.department_id,
+    });
+    const [department, group] = await Promise.all([
+      this.db.department.count({
+        where: {
+          id: d.department_id,
+          facilityId: d.facility_id,
+          facility: { organizationId: u.organizationId },
+        },
+      }),
+      this.db.ingredientGroup.count({
+        where: {
+          id: d.ingredient_group_id,
+          organizationId: u.organizationId,
+        },
+      }),
+    ]);
+    if (!department || !group)
+      this.invalid("Cơ sở, bộ phận hoặc nhóm nguyên liệu không hợp lệ.");
+    const maxQuantity =
+      d.max_quantity_per_request === null ||
+      d.max_quantity_per_request === undefined
+        ? d.max_quantity_per_request
+        : new Prisma.Decimal(d.max_quantity_per_request);
+    if (maxQuantity instanceof Prisma.Decimal && !maxQuantity.gt(0))
+      this.invalid("Giới hạn số lượng gọi phải lớn hơn 0.");
+    const data = await this.db.groupEligibility.upsert({
+      where: {
+        facilityId_departmentId_ingredientGroupId: {
+          facilityId: d.facility_id,
+          departmentId: d.department_id,
+          ingredientGroupId: d.ingredient_group_id,
+        },
+      },
+      create: {
+        facilityId: d.facility_id,
+        departmentId: d.department_id,
+        ingredientGroupId: d.ingredient_group_id,
+        ...(maxQuantity !== undefined
+          ? { maxQuantityPerRequest: maxQuantity }
+          : {}),
+        active: d.active ?? true,
+      },
+      update: {
+        ...(maxQuantity !== undefined
+          ? { maxQuantityPerRequest: maxQuantity }
+          : {}),
+        active: d.active ?? true,
+      },
+      include: {
+        facility: true,
+        department: true,
+        ingredientGroup: true,
+      },
+    });
+    return {
+      data,
+      message: "Cập nhật quyền yêu cầu theo nhóm hàng thành công.",
     };
   }
   async upsertEligibility(u: AuthUser, d: UpsertEligibilityDto) {

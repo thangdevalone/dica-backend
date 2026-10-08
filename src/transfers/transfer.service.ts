@@ -459,11 +459,13 @@ export class TransferService {
           dto.expected_version,
         );
         if (
-          transfer.fromStockLocation.facility.type !== FacilityType.BRANCH ||
-          transfer.toStockLocation.facility.type !== FacilityType.BRANCH
+          this.isCentralPair(
+            transfer.fromStockLocation.facility.type,
+            transfer.toStockLocation.facility.type,
+          )
         )
           this.invalid(
-            "Chỉ điều chuyển giữa hai chi nhánh mới đi qua bước duyệt này.",
+            "Tuyến Kho tổng ↔ Bếp tổng được tự động duyệt khi gửi phiếu.",
           );
         const order = await this.createOrder(tx, transfer);
         await tx.transferApprovalEvent.create({
@@ -598,20 +600,13 @@ export class TransferService {
   }
 
   private assertPair(
-    from: FacilityType,
-    to: FacilityType,
+    _from: FacilityType,
+    _to: FacilityType,
     fromId: string,
     toId: string,
   ) {
-    const central = this.isCentralPair(from, to);
-    const branches =
-      from === FacilityType.BRANCH &&
-      to === FacilityType.BRANCH &&
-      fromId !== toId;
-    if (!central && !branches)
-      this.invalid(
-        "Chỉ hỗ trợ Kho tổng ↔ Bếp tổng hoặc chi nhánh ↔ chi nhánh.",
-      );
+    if (fromId === toId)
+      this.invalid("Kho gửi và kho nhận phải thuộc hai cơ sở khác nhau.");
   }
 
   private isCentralPair(from: FacilityType, to: FacilityType) {

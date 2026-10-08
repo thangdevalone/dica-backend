@@ -67,11 +67,10 @@ export class CreateSupplierDto {
   @IsString()
   @Length(1, 200)
   name!: string;
-  @ApiPropertyOptional({ example: "0901234567", maxLength: 30 })
-  @IsOptional()
+  @ApiProperty({ example: "0901234567", maxLength: 30 })
   @IsString()
-  @MaxLength(30)
-  phone?: string;
+  @Length(1, 30)
+  phone!: string;
   @ApiPropertyOptional({ example: "sales@ncc-a.vn", format: "email" })
   @IsOptional()
   @IsEmail()
@@ -98,6 +97,15 @@ export class LinkSupplierIngredientDto {
   @IsString()
   @Matches(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,4})?$/)
   reference_price?: string;
+  @ApiPropertyOptional({
+    example: false,
+    default: false,
+    description:
+      "Đánh dấu đây là nhà cung cấp ưu tiên của nguyên liệu. Mỗi nguyên liệu chỉ có một nhà cung cấp ưu tiên.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  is_preferred?: boolean;
 }
 
 export class CreateConversionDto {
@@ -181,7 +189,7 @@ export class UpdateSupplierDto {
   @ApiPropertyOptional({ example: "0901234567", maxLength: 30 })
   @IsOptional()
   @IsString()
-  @MaxLength(30)
+  @Length(1, 30)
   phone?: string;
   @ApiPropertyOptional({ example: "sales@ncc-a.vn", format: "email" })
   @IsOptional()
@@ -210,6 +218,10 @@ export class UpdateSupplierIngredientDto {
   @IsString()
   @Matches(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,4})?$/)
   reference_price?: string | null;
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  is_preferred?: boolean;
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()

@@ -105,7 +105,13 @@ export class PushService {
         platform: { in: ["ANDROID", "IOS"] },
         user: { active: true },
       },
-      select: { id: true, userId: true, token: true, platform: true },
+      select: {
+        id: true,
+        userId: true,
+        token: true,
+        platform: true,
+        user: { select: { kind: true } },
+      },
     });
     if (!devices.length) return;
     const byUser = new Map<string, Notification[]>();
@@ -123,6 +129,7 @@ export class PushService {
             device.token,
             device.platform,
             notification,
+            device.user.kind === "SUPPLIER",
           );
           if (invalid)
             await this.db.pushDevice.update({
@@ -145,6 +152,7 @@ export class PushService {
     token: string,
     platform: string,
     notification: Notification,
+    supplierUser: boolean,
   ) {
     const projectId = this.config.getOrThrow<string>("FCM_PROJECT_ID");
     const accessToken = await this.accessToken();
@@ -167,7 +175,7 @@ export class PushService {
               notification_id: notification.id,
               resource_type: notification.resourceType,
               resource_id: notification.resourceId,
-              route: this.route(notification),
+              route: this.route(notification, supplierUser),
             },
             ...(platform === "IOS"
               ? {
@@ -211,10 +219,12 @@ export class PushService {
     throw new Error(`HTTP ${response.status}: ${body.slice(0, 500)}`);
   }
 
-  private route(notification: Notification) {
+  private route(notification: Notification, supplierUser: boolean) {
     const routes: Record<string, string> = {
       SupplyRequest: `/requests/${notification.resourceId}`,
-      FulfillmentOrder: `/orders/${notification.resourceId}`,
+      FulfillmentOrder: supplierUser
+        ? `/supplier/orders/${notification.resourceId}`
+        : `/orders/${notification.resourceId}`,
       Transfer: `/transfers/${notification.resourceId}`,
       DamageReport: `/damage-reports/${notification.resourceId}`,
       DiscrepancyCase: `/discrepancies/${notification.resourceId}`,

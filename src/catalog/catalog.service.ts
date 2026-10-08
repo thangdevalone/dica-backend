@@ -167,7 +167,7 @@ export class CatalogService {
           organizationId: u.organizationId,
           code: d.code.toUpperCase(),
           name: d.name,
-          ...(d.phone ? { phone: d.phone } : {}),
+          phone: d.phone,
           ...(d.email ? { email: d.email } : {}),
         },
       }),
@@ -185,24 +185,39 @@ export class CatalogService {
       }),
     ]);
     if (!s || !i) this.invalid();
-    const data = await this.db.supplierIngredient.upsert({
-      where: {
-        supplierId_ingredientId: {
+    const data = await this.db.$transaction(async (tx) => {
+      if (d.is_preferred)
+        await tx.supplierIngredient.updateMany({
+          where: { ingredientId: d.ingredient_id, isPreferred: true },
+          data: { isPreferred: false },
+        });
+      return tx.supplierIngredient.upsert({
+        where: {
+          supplierId_ingredientId: {
+            supplierId: d.supplier_id,
+            ingredientId: d.ingredient_id,
+          },
+        },
+        create: {
           supplierId: d.supplier_id,
           ingredientId: d.ingredient_id,
+          ...(d.supplier_sku ? { supplierSku: d.supplier_sku } : {}),
+          ...(d.reference_price ? { referencePrice: d.reference_price } : {}),
+          isPreferred: d.is_preferred ?? false,
         },
-      },
-      create: {
-        supplierId: d.supplier_id,
-        ingredientId: d.ingredient_id,
-        ...(d.supplier_sku ? { supplierSku: d.supplier_sku } : {}),
-        ...(d.reference_price ? { referencePrice: d.reference_price } : {}),
-      },
-      update: {
-        active: true,
-        ...(d.supplier_sku ? { supplierSku: d.supplier_sku } : {}),
-        ...(d.reference_price ? { referencePrice: d.reference_price } : {}),
-      },
+        update: {
+          active: true,
+          ...(d.supplier_sku ? { supplierSku: d.supplier_sku } : {}),
+          ...(d.reference_price ? { referencePrice: d.reference_price } : {}),
+          ...(d.is_preferred !== undefined
+            ? { isPreferred: d.is_preferred }
+            : {}),
+        },
+        include: {
+          supplier: true,
+          ingredient: { include: { baseUnit: true } },
+        },
+      });
     });
     return {
       data,
@@ -342,7 +357,11 @@ export class CatalogService {
             supplier: true,
             ingredient: { include: { baseUnit: true } },
           },
-          orderBy: [{ supplierId: "asc" }, { id: "asc" }],
+          orderBy: [
+            { isPreferred: "desc" },
+            { supplierId: "asc" },
+            { id: "asc" },
+          ],
           ...(skip !== undefined ? { skip } : {}),
           take,
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
@@ -414,7 +433,7 @@ export class CatalogService {
       where: { id },
       data: {
         ...(d.name !== undefined ? { name: d.name } : {}),
-        ...(d.phone !== undefined ? { phone: d.phone || null } : {}),
+        ...(d.phone !== undefined ? { phone: d.phone } : {}),
         ...(d.email !== undefined ? { email: d.email || null } : {}),
         ...(d.active !== undefined ? { active: d.active } : {}),
       },
@@ -428,22 +447,46 @@ export class CatalogService {
     d: D.UpdateSupplierIngredientDto,
   ) {
     this.scope.assertAccess(u, "supplier_ingredient.manage", {});
-    const existing = await this.db.supplierIngredient.count({
+    const existing = await this.db.supplierIngredient.findFirst({
       where: { id, supplier: { organizationId: u.organizationId } },
     });
     if (!existing) this.notFound();
-    const data = await this.db.supplierIngredient.update({
-      where: { id },
-      data: {
-        ...(d.supplier_sku !== undefined
-          ? { supplierSku: d.supplier_sku || null }
-          : {}),
-        ...(d.reference_price !== undefined
-          ? { referencePrice: d.reference_price }
-          : {}),
-        ...(d.active !== undefined ? { active: d.active } : {}),
-      },
-      include: { supplier: true, ingredient: { include: { baseUnit: true } } },
+    if (
+      d.is_preferred &&
+      (d.active === false || (!existing.active && d.active !== true))
+    )
+      this.invalidMessage("Nhà cung cấp ưu tiên phải đang hoạt động.");
+    const data = await this.db.$transaction(async (tx) => {
+      if (d.is_preferred)
+        await tx.supplierIngredient.updateMany({
+          where: {
+            ingredientId: existing.ingredientId,
+            isPreferred: true,
+            id: { not: id },
+          },
+          data: { isPreferred: false },
+        });
+      return tx.supplierIngredient.update({
+        where: { id },
+        data: {
+          ...(d.supplier_sku !== undefined
+            ? { supplierSku: d.supplier_sku || null }
+            : {}),
+          ...(d.reference_price !== undefined
+            ? { referencePrice: d.reference_price }
+            : {}),
+          ...(d.active !== undefined ? { active: d.active } : {}),
+          ...(d.active === false
+            ? { isPreferred: false }
+            : d.is_preferred !== undefined
+              ? { isPreferred: d.is_preferred }
+              : {}),
+        },
+        include: {
+          supplier: true,
+          ingredient: { include: { baseUnit: true } },
+        },
+      });
     });
     return {
       data,

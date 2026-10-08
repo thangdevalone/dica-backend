@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -30,6 +30,34 @@ export class EligibilityListQueryDto extends SourcingListQueryDto {
   @IsOptional()
   @IsUUID("all", { message: "Mã bộ phận không hợp lệ." })
   department_id?: string;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    default: false,
+    description:
+      "Trả danh sách nguyên liệu hiệu lực sau khi gộp quyền theo nhóm và ngoại lệ theo từng nguyên liệu. Bắt buộc truyền facility_id và department_id.",
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true")
+  @IsBoolean()
+  effective?: boolean;
+}
+
+export class GroupEligibilityListQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã cơ sở không hợp lệ." })
+  facility_id?: string;
+
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã bộ phận không hợp lệ." })
+  department_id?: string;
+
+  @ApiPropertyOptional({ format: "uuid" })
+  @IsOptional()
+  @IsUUID("all", { message: "Mã nhóm nguyên liệu không hợp lệ." })
+  ingredient_group_id?: string;
 }
 export class SourceRuleListQueryDto extends SourcingListQueryDto {
   @ApiPropertyOptional({ enum: SourceType })
@@ -58,6 +86,37 @@ export class UpsertEligibilityDto {
   @IsString()
   @Matches(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,3})?$/)
   max_quantity_per_request?: string | null;
+  @ApiPropertyOptional({ example: true, default: true })
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+export class UpsertGroupEligibilityDto {
+  @ApiProperty({ format: "uuid", description: "Mã cơ sở" })
+  @IsUUID()
+  facility_id!: string;
+
+  @ApiProperty({ format: "uuid", description: "Mã bộ phận" })
+  @IsUUID()
+  department_id!: string;
+
+  @ApiProperty({ format: "uuid", description: "Mã nhóm nguyên liệu" })
+  @IsUUID()
+  ingredient_group_id!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: "25.5",
+    description:
+      "Giới hạn mặc định cho từng nguyên liệu thuộc nhóm, tính theo đơn vị cơ sở; có thể ghi đè bằng cấu hình từng nguyên liệu.",
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,3})?$/)
+  max_quantity_per_request?: string | null;
+
   @ApiPropertyOptional({ example: true, default: true })
   @IsOptional()
   @IsBoolean()

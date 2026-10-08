@@ -1,6 +1,6 @@
-# DICA — Kết quả review và backlog theo `flow.md`
+# DICA — Kết quả review và backlog theo `new-flow.md`
 
-Review ngày 2026-10-07. `flow.md` là nguồn nghiệp vụ chính; file này chỉ ghi phần chưa có, đang khác flow hoặc phải hỏi khách trước khi chốt. Không tự coi policy demo hay dữ liệu seed là quyết định của khách.
+Review cập nhật ngày 2026-10-08. `new-flow.md` là nguồn nghiệp vụ chính; file này chỉ ghi phần chưa có, đang khác flow hoặc phải hỏi khách trước khi chốt. Không tự coi policy demo hay dữ liệu seed là quyết định của khách.
 
 ## 1. Kết luận review
 
@@ -9,19 +9,19 @@ Review ngày 2026-10-07. `flow.md` là nguồn nghiệp vụ chính; file này c
 - Có Web Admin cho tổ chức, tài khoản/RBAC, danh mục, nguồn cung và lịch sử cấu hình.
 - Có flow yêu cầu hàng `DRAFT → SUBMITTED → APPROVED/REJECTED`, tách đơn theo nguồn kho/NCC và giữ snapshot nguồn/quy đổi.
 - Có xuất/nhận nhiều lần, ghi lượng thực nhận, tạo case thiếu/thừa/hỏng, stock ledger, tồn kho và audit/idempotency.
-- Có điều chuyển Chi nhánh ↔ Chi nhánh qua duyệt; Kho tổng ↔ Bếp tổng tự duyệt với policy `NO_MANAGER_APPROVAL`, có ETA, lịch sử và thông báo.
+- Có điều chuyển giữa hai cơ sở khác nhau; Kho tổng ↔ Bếp tổng tự duyệt với policy `NO_MANAGER_APPROVAL`, các tuyến khác qua duyệt, có ETA, lịch sử và thông báo.
 - Có kiểm kê cuối ngày, cảnh báo khi kiểm kê lệch, mapping/định mức/import bán hàng và tính variance ở mức contract/import thủ công.
 - Có báo hỏng, payment tracking cơ bản, notification trong DB và FCM Android/iOS.
 - Ảnh receipt/báo hỏng dùng R2 public read; client upload bằng presigned PUT và xem bằng public asset URL cố định.
+- Có grant quyền yêu cầu theo nhóm hàng cho `facility + department`, tự áp dụng cho nguyên liệu mới trong nhóm và cho phép cấu hình từng nguyên liệu ghi đè.
+- Có một nhà cung cấp ưu tiên đang hoạt động cho mỗi nguyên liệu; nguồn thực tế từng cơ sở vẫn do source rule quyết định.
+- Backend và contract tích hợp cho phép nhà cung cấp dùng chung DICA Mobile, chỉ xem đơn của chính mình và nhận thông báo đơn mới.
+- Phiếu nhận bắt buộc có ít nhất một ảnh `READY` trước khi ghi sổ.
 
 ### Chưa khớp hoặc chưa đủ để coi là hoàn thành
 
 - Chưa có nghiệp vụ hoàn hàng.
-- Quyền gọi hàng hiện cấu hình theo từng nguyên liệu, chưa có grant trực tiếp theo nhóm hàng như flow mô tả.
-- Một nguyên liệu liên kết được nhiều NCC nhưng chưa có trường “NCC ưu tiên hiển thị đầu”.
-- Code vẫn có `UserKind.SUPPLIER`, role/tài khoản seed và `/supplier/orders`, trong khi flow chỉ chốt không làm app riêng cho NCC.
 - Chưa có `DELETE`; tổ chức/danh mục đang dùng `active=false`. Cần xác nhận “xóa” trong flow có nghĩa là ngừng sử dụng hay xóa cứng.
-- Điều chuyển chỉ chấp nhận Chi nhánh ↔ Chi nhánh hoặc Kho tổng ↔ Bếp tổng; chưa hỗ trợ Chi nhánh ↔ Kho tổng/Bếp tổng qua module transfer.
 - Các policy thiếu/thừa, đóng phần thiếu, báo hỏng, điều chỉnh tồn và payment chưa được khách duyệt; một số action production đang bị chặn bằng `DEMO_POLICY_ENABLED`.
 - Chưa có nhắc thiếu hàng qua ngày, cảnh báo tồn/hao hụt tự động và kết nối iPOS thật.
 - Chưa có ma trận đầy đủ cho người nhận, nội dung và kênh thông báo của từng sự kiện.
@@ -31,28 +31,27 @@ Review ngày 2026-10-07. `flow.md` là nguồn nghiệp vụ chính; file này c
 
 ### FLOW-01 — Vai trò, quyền mặc định và nhóm hàng
 
-**Hiện tại:** Có role mẫu Owner, Quản lý tổng, Quản lý/Nhân viên chi nhánh, Nhân viên kho và grant theo organization/facility/stock location/department/own. Eligibility giới hạn theo `facility + department + ingredient`.
+**Hiện tại:** Có role mẫu Owner, Quản lý tổng, Quản lý/Nhân viên chi nhánh, Nhân viên kho và grant theo organization/facility/stock location/department/own. Eligibility hỗ trợ cấp theo nhóm tại `facility + department`, tự áp dụng cho mặt hàng mới và cho phép cấu hình từng nguyên liệu ghi đè.
 
 **Hỏi khách:**
 
 - Chốt ma trận role × permission mặc định; ai được duyệt, sửa/xóa, xem report, variance, damage và nhận thông báo.
 - Chủ có “toàn quyền nghiệp vụ” hay cả quyền vận hành như backup/restore.
-- Quyền nhóm hàng được gán cho role, user hay department; khi thêm nguyên liệu mới vào nhóm có tự động được phép gọi không.
-- Có cần override theo từng nguyên liệu và giới hạn số lượng riêng sau khi đã cấp theo nhóm không.
+- Có cần thêm grant nhóm hàng trực tiếp theo từng user/role ngoài cấu hình hiện tại theo bộ phận không.
 
-**Sau khi chốt:** Bổ sung model/grant nhóm hàng nếu cần, API/Web cấu hình, lọc Mobile và test scope trước pagination.
+**Sau khi chốt:** Nếu cần cấp trực tiếp theo user/role, bổ sung scope tương ứng mà không làm mất cấu hình theo bộ phận hiện có.
 
-### FLOW-02 — Phạm vi tài khoản nhà cung ứng
+### FLOW-02 — Thao tác mở rộng của nhà cung cấp
 
-**Hiện tại:** Không có app NCC, nhưng backend vẫn có tài khoản/role NCC, projection `/supplier/orders`, seed `supplier.a` và notification đơn mới cho NCC.
+**Hiện tại:** Đã chốt NCC dùng chung DICA Mobile. Backend có tài khoản/role NCC, `/supplier/orders`, cô lập theo `supplier_id`, thông báo đơn mới và deep link riêng. Contract Mobile v1 chỉ cho xem đơn; workspace chưa có source Mobile để triển khai/kiểm tra màn hình thực tế.
 
 **Hỏi khách:**
 
-- “Không phát triển app riêng” có cho phép NCC đăng nhập cùng hệ thống/app để chỉ xem đơn không.
-- Nếu không cho NCC đăng nhập: có xóa user kind/role/API/seed/notification NCC, hay giữ contract tắt bằng feature flag cho giai đoạn sau.
-- Đơn NCC chỉ do Quản lý tổng tải file và tự gửi qua Zalo/email hay cần gửi tự động.
+- NCC có cần bấm nhận/từ chối đơn không.
+- Có cần trạng thái đang chuẩn bị/đang giao, nhập lượng giao và đính kèm chứng từ không.
+- NCC có được xem đơn giá, công nợ hoặc cập nhật thông tin thanh toán không.
 
-**Sau khi chốt:** Xóa hoặc khóa nhất quán toàn bộ surface NCC; không chỉ ẩn UI.
+**Sau khi chốt:** Mở thêm permission, command API, trạng thái và màn hình Mobile tương ứng; không suy diễn từ quyền xem đơn.
 
 ### FLOW-03 — Vòng đời phiếu và nơi duyệt
 
@@ -121,15 +120,15 @@ Review ngày 2026-10-07. `flow.md` là nguồn nghiệp vụ chính; file này c
 
 ### FLOW-08 — Phạm vi tuyến điều chuyển
 
-**Hiện tại:** Module transfer chỉ cho Chi nhánh ↔ Chi nhánh hoặc Kho tổng ↔ Bếp tổng. Tuyến Kho tổng → Bếp/Bàn theo yêu cầu hàng nằm ở flow request/order, không phải transfer.
+**Hiện tại:** Module transfer cho phép hai cơ sở khác nhau điều chuyển. Kho tổng ↔ Bếp tổng tự duyệt; các tuyến khác chuyển sang `SUBMITTED` để người có quyền duyệt. Luồng xin hàng từ Kho tổng vẫn nằm ở request/order, không phải transfer.
 
 **Hỏi khách:**
 
-- “Giữa các cơ sở” có bao gồm Chi nhánh ↔ Kho tổng/Bếp tổng ngoài luồng xin hàng không.
+- Có thực sự cho phép Chi nhánh ↔ Kho tổng/Bếp tổng ngoài luồng xin hàng không; hiện backend đang cho phép theo nghĩa rộng của “giữa các cơ sở”.
 - Bên nào tạo phiếu; `expected_arrival_at` là thời điểm dự kiến hay một khoảng giờ bắt đầu/kết thúc.
 - Khi tuyến không phải Kho tổng ↔ Bếp tổng, tất cả đều cần Quản lý tổng duyệt hay có ngoại lệ khác.
 
-**Sau khi chốt:** Mở rộng validation/model ETA nếu cần và test từng cặp facility.
+**Sau khi chốt:** Thu hẹp validation nếu khách không cho một số cặp cơ sở; mở rộng model ETA nếu cần và test từng cặp facility.
 
 ### FLOW-09 — Xóa hay ngừng sử dụng cấu hình
 
@@ -145,15 +144,15 @@ Review ngày 2026-10-07. `flow.md` là nguồn nghiệp vụ chính; file này c
 
 ### FLOW-10 — NCC ưu tiên và quy tắc nguồn hàng
 
-**Hiện tại:** Một nguyên liệu có nhiều `SupplierIngredient`; mỗi `facility + ingredient` chỉ có một `SourceRule` active trỏ đến kho hoặc một NCC. Có bulk đổi source nhưng chưa có `preferred/priority` trên danh sách NCC.
+**Hiện tại:** Một nguyên liệu có nhiều `SupplierIngredient` và tối đa một liên kết đang hoạt động được đánh dấu `isPreferred`; API/UI đưa NCC ưu tiên lên đầu. Mỗi `facility + ingredient` vẫn có một `SourceRule` trỏ đến kho hoặc một NCC; đánh dấu ưu tiên không tự đổi nguồn đã cấu hình.
 
 **Hỏi khách:**
 
-- “NCC ưu tiên hiển thị đầu” chỉ là sắp xếp UI hay là nguồn mặc định khi tạo rule/đơn.
+- NCC ưu tiên có cần tự được chọn khi tạo source rule mới hay chỉ hiển thị/đánh dấu trước như hiện tại.
 - Có cần nhiều mức ưu tiên/fallback khi NCC chính hết hàng không; hệ thống tự đổi hay phải người có quyền duyệt.
 - Bulk chuyển NCC áp dụng cho cấu hình tương lai hay cả đơn đã duyệt/chưa giao.
 
-**Sau khi chốt:** Bổ sung priority/fallback hoặc chỉ sort UI; không tự đổi nguồn của đơn lịch sử.
+**Sau khi chốt:** Nếu cần, bổ sung nhiều mức ưu tiên/fallback; không tự đổi nguồn của đơn lịch sử nếu chưa có quy tắc rõ ràng.
 
 ### FLOW-11 — Ma trận thông báo
 
@@ -191,13 +190,13 @@ Backend đã trả public `viewUrl` cố định. Web cần preview/tải ảnh 
 
 ### FLOW-17 — Hoàn thiện cảnh báo lint Web
 
-**Hiện tại (2026-10-07):** Web typecheck đạt; ESLint có 0 error và 87 warning, chủ yếu là `react-hooks/set-state-in-effect` và import/biến không dùng.
+**Hiện tại (2026-10-08):** Web typecheck/build đạt; ESLint có 0 error và 105 warning, chủ yếu là `react-hooks/set-state-in-effect` và import/biến không dùng.
 
 Giữ `npm run lint` không warning ở các file sửa và không làm đổi hành vi permission-gated tab/deep link.
 
 ## 4. Ngoài phạm vi theo `flow.md`
 
-- App riêng cho NCC (chờ câu trả lời FLOW-02 về API/tài khoản NCC hiện có).
+- App riêng cho NCC; nhà cung cấp dùng một không gian giới hạn quyền trong app DICA chung.
 - App khách hàng, đặt món, đánh giá.
 - Chấm công và quy trình vận hành nhà hàng.
 - Phần mềm bán hàng thay thế iPOS.

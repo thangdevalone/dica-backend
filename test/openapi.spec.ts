@@ -123,6 +123,36 @@ test("response schema có hạn mức gọi hàng và ETA điều chuyển đún
   });
 });
 
+test("supplier preference and group eligibility expose concrete schemas", () => {
+  const supplierIngredient = DICA_RESPONSE_SCHEMAS.SupplierIngredient as {
+    properties: Record<string, unknown>;
+  };
+  const groupEligibility = DICA_RESPONSE_SCHEMAS.GroupEligibility as {
+    properties: Record<string, unknown>;
+  };
+
+  assert.deepEqual(supplierIngredient.properties.isPreferred, {
+    type: "boolean",
+  });
+  assert.deepEqual(groupEligibility.properties.ingredientGroupId, {
+    type: "string",
+    format: "uuid",
+  });
+});
+
+test("supplier order projection does not expose price before policy is approved", () => {
+  const supplierOrder = DICA_RESPONSE_SCHEMAS.SupplierOrderProjection as {
+    properties: {
+      lines: { items: { properties: Record<string, unknown> } };
+    };
+  };
+
+  assert.equal(
+    "unitPriceSnapshot" in supplierOrder.properties.lines.items.properties,
+    false,
+  );
+});
+
 test("FCM, attachment and iPOS operations expose concrete response models", () => {
   const input = document();
   input.paths["/push-devices"] = {

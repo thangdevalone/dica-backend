@@ -221,6 +221,7 @@ model Facility {
   stockLocations StockLocation[]
   departments    Department[]
   eligibilities  ItemEligibility[]
+  groupEligibilities GroupEligibility[]
   sourceRules    SourceRule[]
   requests       SupplyRequest[]
   roleGrants     RoleGrant[]
@@ -277,6 +278,7 @@ model Department {
   stockLocation   StockLocation?    @relation(fields: [stockLocationId], references: [id])
   grants          RoleGrant[]
   eligibilities   ItemEligibility[]
+  groupEligibilities GroupEligibility[]
   requests        SupplyRequest[]
 
   @@unique([facilityId, code])
@@ -396,6 +398,7 @@ model IngredientGroup {
   active         Boolean      @default(true)
   organization   Organization @relation(fields: [organizationId], references: [id])
   ingredients    Ingredient[]
+  eligibilities  GroupEligibility[]
 
   @@unique([organizationId, code])
   @@map("ingredient_groups")
@@ -488,11 +491,13 @@ model SupplierIngredient {
   ingredientId   String     @map("ingredient_id") @db.Uuid
   supplierSku    String?    @map("supplier_sku") @db.VarChar(100)
   referencePrice Decimal?   @map("reference_price") @db.Decimal(20, 4)
+  isPreferred    Boolean    @default(false) @map("is_preferred")
   active         Boolean    @default(true)
   supplier       Supplier   @relation(fields: [supplierId], references: [id])
   ingredient     Ingredient @relation(fields: [ingredientId], references: [id])
 
   @@unique([supplierId, ingredientId])
+  @@index([ingredientId, isPreferred, active])
   @@map("supplier_ingredients")
 }
 
@@ -509,6 +514,22 @@ model ItemEligibility {
 
   @@unique([facilityId, departmentId, ingredientId])
   @@map("item_eligibilities")
+}
+
+model GroupEligibility {
+  id                    String          @id @default(uuid()) @db.Uuid
+  facilityId            String          @map("facility_id") @db.Uuid
+  departmentId          String          @map("department_id") @db.Uuid
+  ingredientGroupId     String          @map("ingredient_group_id") @db.Uuid
+  maxQuantityPerRequest Decimal?        @map("max_quantity_per_request") @db.Decimal(20, 3)
+  active                Boolean         @default(true)
+  facility              Facility        @relation(fields: [facilityId], references: [id])
+  department            Department      @relation(fields: [departmentId], references: [id])
+  ingredientGroup       IngredientGroup @relation(fields: [ingredientGroupId], references: [id])
+
+  @@unique([facilityId, departmentId, ingredientGroupId])
+  @@index([ingredientGroupId, active])
+  @@map("group_eligibilities")
 }
 
 model SourceRule {

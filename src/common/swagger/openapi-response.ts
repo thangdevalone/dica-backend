@@ -296,16 +296,20 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
     email: nullable({ type: "string", format: "email" }),
     active: { type: "boolean" },
   }),
-  SupplierIngredient: entity(["id", "supplierId", "ingredientId", "active"], {
-    id: uuid,
-    supplierId: uuid,
-    ingredientId: uuid,
-    supplierSku: nullable({ type: "string" }),
-    referencePrice: nullable(decimal),
-    active: { type: "boolean" },
-    supplier: ref("Supplier"),
-    ingredient: ref("Ingredient"),
-  }),
+  SupplierIngredient: entity(
+    ["id", "supplierId", "ingredientId", "isPreferred", "active"],
+    {
+      id: uuid,
+      supplierId: uuid,
+      ingredientId: uuid,
+      supplierSku: nullable({ type: "string" }),
+      referencePrice: nullable(decimal),
+      isPreferred: { type: "boolean" },
+      active: { type: "boolean" },
+      supplier: ref("Supplier"),
+      ingredient: ref("Ingredient"),
+    },
+  ),
   ItemEligibility: entity(
     [
       "id",
@@ -322,9 +326,32 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       ingredientId: uuid,
       maxQuantityPerRequest: nullable(decimal),
       active: { type: "boolean" },
+      grantType: { type: "string", enum: ["INGREDIENT", "GROUP"] },
+      groupEligibilityId: nullable(uuid),
       facility: ref("Facility"),
       department: ref("Department"),
       ingredient: ref("Ingredient"),
+    },
+  ),
+  GroupEligibility: entity(
+    [
+      "id",
+      "facilityId",
+      "departmentId",
+      "ingredientGroupId",
+      "maxQuantityPerRequest",
+      "active",
+    ],
+    {
+      id: uuid,
+      facilityId: uuid,
+      departmentId: uuid,
+      ingredientGroupId: uuid,
+      maxQuantityPerRequest: nullable(decimal),
+      active: { type: "boolean" },
+      facility: ref("Facility"),
+      department: ref("Department"),
+      ingredientGroup: ref("IngredientGroup"),
     },
   ),
   SourceRule: entity(
@@ -557,7 +584,6 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
             approvedQuantity: decimal,
             receivedQuantity: decimal,
             unitCodeSnapshot: { type: "string" },
-            unitPriceSnapshot: nullable(decimal),
             ingredient: entity(["code", "name"], {
               code: { type: "string" },
               name: { type: "string" },
@@ -1171,6 +1197,7 @@ const LIST_ROUTES = new Set([
   "/supplier-ingredients",
   "/conversions",
   "/item-eligibility",
+  "/group-eligibility",
   "/source-rules",
   "/requests",
   "/transfers",
@@ -1220,6 +1247,7 @@ function responseSchemaName(path: string): string {
   if (path.startsWith("/conversions")) return "UnitConversion";
   if (path.startsWith("/units")) return "Unit";
   if (path.startsWith("/item-eligibility")) return "ItemEligibility";
+  if (path.startsWith("/group-eligibility")) return "GroupEligibility";
   if (path.startsWith("/source-rules")) return "SourceRule";
   if (path.startsWith("/requests")) return "SupplyRequest";
   if (path.startsWith("/transfers")) return "Transfer";

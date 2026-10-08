@@ -554,6 +554,20 @@ export class DeliveryService {
         });
         if (doc.status !== ReceiptStatus.DRAFT) this.state();
         if (doc.version !== d.expected_version) this.version();
+        const readyImageCount = await tx.attachment.count({
+          where: {
+            organizationId: u.organizationId,
+            resourceType: "RECEIPT",
+            resourceId: doc.id,
+            uploadStatus: "READY",
+          },
+        });
+        if (readyImageCount < 1)
+          throw new ApiException(
+            ErrorCode.VALIDATION_ERROR,
+            "Cần đính kèm ít nhất một ảnh kiểm nhận trước khi ghi sổ phiếu nhận.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+          );
         if (
           doc.order.status !== OrderStatus.RELEASED &&
           doc.order.status !== OrderStatus.PARTIAL

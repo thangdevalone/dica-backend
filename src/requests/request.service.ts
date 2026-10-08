@@ -401,39 +401,56 @@ export class RequestService {
         if (!r.department.stockLocationId)
           this.invalid("Bộ phận nhận chưa có kho.");
         const ingredientIds = r.lines.map((line) => line.ingredientId);
-        const [currentRules, currentEligibilities, supplierPrices] =
-          await Promise.all([
-            tx.sourceRule.findMany({
-              where: {
-                facilityId: r.facilityId,
-                ingredientId: { in: ingredientIds },
+        const [
+          currentRules,
+          currentEligibilities,
+          currentGroupEligibilities,
+          supplierPrices,
+        ] = await Promise.all([
+          tx.sourceRule.findMany({
+            where: {
+              facilityId: r.facilityId,
+              ingredientId: { in: ingredientIds },
+            },
+          }),
+          tx.itemEligibility.findMany({
+            where: {
+              facilityId: r.facilityId,
+              departmentId: r.departmentId,
+              ingredientId: { in: ingredientIds },
+            },
+            select: { ingredientId: true, active: true },
+          }),
+          tx.groupEligibility.findMany({
+            where: {
+              facilityId: r.facilityId,
+              departmentId: r.departmentId,
+              active: true,
+              ingredientGroup: {
+                ingredients: { some: { id: { in: ingredientIds } } },
               },
-            }),
-            tx.itemEligibility.findMany({
-              where: {
-                facilityId: r.facilityId,
-                departmentId: r.departmentId,
-                ingredientId: { in: ingredientIds },
-                active: true,
+            },
+            select: { ingredientGroupId: true },
+          }),
+          tx.supplierIngredient.findMany({
+            where: {
+              supplierId: {
+                in: r.lines.flatMap((line) =>
+                  line.supplierId ? [line.supplierId] : [],
+                ),
               },
-              select: { ingredientId: true },
-            }),
-            tx.supplierIngredient.findMany({
-              where: {
-                supplierId: {
-                  in: r.lines.flatMap((line) =>
-                    line.supplierId ? [line.supplierId] : [],
-                  ),
-                },
-                ingredientId: { in: ingredientIds },
-              },
-            }),
-          ]);
+              ingredientId: { in: ingredientIds },
+            },
+          }),
+        ]);
         const ruleByIngredient = new Map(
           currentRules.map((rule) => [rule.ingredientId, rule]),
         );
-        const eligibleIngredients = new Set(
-          currentEligibilities.map((item) => item.ingredientId),
+        const eligibilityByIngredient = new Map(
+          currentEligibilities.map((item) => [item.ingredientId, item.active]),
+        );
+        const eligibleGroups = new Set(
+          currentGroupEligibilities.map((item) => item.ingredientGroupId),
         );
         const priceBySupplierAndIngredient = new Map(
           supplierPrices.map((price) => [
@@ -443,10 +460,20 @@ export class RequestService {
         );
         for (const line of r.lines) {
           const current = ruleByIngredient.get(line.ingredientId);
+          const directEligibility = eligibilityByIngredient.get(
+            line.ingredientId,
+          );
+          const isEligible =
+            directEligibility !== undefined
+              ? directEligibility
+              : Boolean(
+                  line.ingredient.groupId &&
+                  eligibleGroups.has(line.ingredient.groupId),
+                );
           if (
             !current ||
             current.revision !== line.sourceRuleRevision ||
-            !eligibleIngredients.has(line.ingredientId)
+            !isEligible
           )
             throw new ApiException(
               ErrorCode.VERSION_CONFLICT,
@@ -469,7 +496,7 @@ export class RequestService {
           const o = await tx.fulfillmentOrder.create({
             data: {
               organizationId: u.organizationId,
-              requestId: u.requestId,
+              requestId: id,
               code: this.code("ORD"),
               sourceType:
                 type === SourceType.STOCK
@@ -500,7 +527,7 @@ export class RequestService {
         }
         await tx.approvalEvent.create({
           data: {
-            requestId: u.requestId,
+            requestId: id,
             actorId: u.id,
             decision: ApprovalDecision.APPROVED,
             policy: "MANAGER_APPROVAL",
@@ -723,36 +750,57 @@ export class RequestService {
     const ingredientIds = requestedLines.map((line) => line.ingredient_id);
     const unitIds = [...new Set(requestedLines.map((line) => line.unit_id))];
     const now = new Date();
-    const [eligibilities, units, conversions] = await Promise.all([
-      tx.itemEligibility.findMany({
-        where: {
-          facilityId,
-          departmentId,
-          ingredientId: { in: ingredientIds },
-          active: true,
-          ingredient: { organizationId: user.organizationId, active: true },
-        },
-        include: { ingredient: true },
-      }),
-      tx.unit.findMany({
-        where: {
-          id: { in: unitIds },
-          organizationId: user.organizationId,
-          active: true,
-        },
-      }),
-      tx.ingredientUnitConversion.findMany({
-        where: {
-          ingredientId: { in: ingredientIds },
-          unitId: { in: unitIds },
-          effectiveFrom: { lte: now },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-        },
-        orderBy: { version: "desc" },
-      }),
-    ]);
+    const [ingredients, eligibilities, groupEligibilities, units, conversions] =
+      await Promise.all([
+        tx.ingredient.findMany({
+          where: {
+            id: { in: ingredientIds },
+            organizationId: user.organizationId,
+            active: true,
+          },
+        }),
+        tx.itemEligibility.findMany({
+          where: {
+            facilityId,
+            departmentId,
+            ingredientId: { in: ingredientIds },
+          },
+        }),
+        tx.groupEligibility.findMany({
+          where: {
+            facilityId,
+            departmentId,
+            active: true,
+            ingredientGroup: {
+              ingredients: { some: { id: { in: ingredientIds } } },
+            },
+          },
+        }),
+        tx.unit.findMany({
+          where: {
+            id: { in: unitIds },
+            organizationId: user.organizationId,
+            active: true,
+          },
+        }),
+        tx.ingredientUnitConversion.findMany({
+          where: {
+            ingredientId: { in: ingredientIds },
+            unitId: { in: unitIds },
+            effectiveFrom: { lte: now },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+          },
+          orderBy: { version: "desc" },
+        }),
+      ]);
+    const ingredientById = new Map(
+      ingredients.map((ingredient) => [ingredient.id, ingredient]),
+    );
     const eligibilityByIngredient = new Map(
       eligibilities.map((item) => [item.ingredientId, item]),
+    );
+    const eligibilityByGroup = new Map(
+      groupEligibilities.map((item) => [item.ingredientGroupId, item]),
     );
     const unitById = new Map(units.map((unit) => [unit.id, unit]));
     const conversionByPair = new Map<string, (typeof conversions)[number]>();
@@ -761,8 +809,16 @@ export class RequestService {
       if (!conversionByPair.has(key)) conversionByPair.set(key, conversion);
     }
     return requestedLines.map((line) => {
-      const eligibility = eligibilityByIngredient.get(line.ingredient_id);
-      if (!eligibility)
+      const ingredient = ingredientById.get(line.ingredient_id);
+      const directEligibility = eligibilityByIngredient.get(line.ingredient_id);
+      const groupEligibility = ingredient?.groupId
+        ? eligibilityByGroup.get(ingredient.groupId)
+        : undefined;
+      const eligibility = directEligibility ?? groupEligibility;
+      const isEligible = directEligibility
+        ? directEligibility.active
+        : Boolean(groupEligibility?.active);
+      if (!ingredient || !eligibility || !isEligible)
         throw new ApiException(
           ErrorCode.VALIDATION_ERROR,
           "Nguyên liệu không được phép xin tại bộ phận.",
@@ -772,7 +828,7 @@ export class RequestService {
       const unit = unitById.get(line.unit_id);
       if (!unit) this.invalid("Đơn vị không tồn tại hoặc khác tổ chức.");
       const factor =
-        line.unit_id === eligibility.ingredient.baseUnitId
+        line.unit_id === ingredient.baseUnitId
           ? new Prisma.Decimal(1)
           : conversionByPair.get(`${line.ingredient_id}:${line.unit_id}`)
               ?.factorToBase;
@@ -790,7 +846,7 @@ export class RequestService {
             ingredient_id: line.ingredient_id,
             max_quantity_per_request:
               eligibility.maxQuantityPerRequest.toString(),
-            base_unit_id: eligibility.ingredient.baseUnitId,
+            base_unit_id: ingredient.baseUnitId,
           },
         );
       return {
@@ -798,7 +854,7 @@ export class RequestService {
         requestedUnitId: line.unit_id,
         requestedQuantity: line.quantity,
         baseQuantity,
-        ingredientNameSnapshot: eligibility.ingredient.name,
+        ingredientNameSnapshot: ingredient.name,
         unitCodeSnapshot: unit.code,
         conversionFactorSnapshot: factor,
       };

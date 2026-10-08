@@ -17,8 +17,10 @@ import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
   BulkSourceRuleDto,
   EligibilityListQueryDto,
+  GroupEligibilityListQueryDto,
   SourceRuleListQueryDto,
   UpsertEligibilityDto,
+  UpsertGroupEligibilityDto,
   UpsertSourceRuleDto,
 } from "./sourcing.dto.js";
 import { SourcingService } from "./sourcing.service.js";
@@ -43,6 +45,22 @@ export class SourcingController {
   @RequirePermissions("eligibility.manage")
   ue(@CurrentUser() u: AuthUser, @Body() d: UpsertEligibilityDto) {
     return this.s.upsertEligibility(u, d);
+  }
+  @ApiEndpoint("Xem nhóm hàng được phép yêu cầu theo bộ phận", {
+    audience: "both",
+  })
+  @Get("group-eligibility")
+  @RequirePermissions("eligibility.read")
+  ge(@CurrentUser() u: AuthUser, @Query() q: GroupEligibilityListQueryDto) {
+    return this.s.groupEligibility(u, q);
+  }
+  @ApiEndpoint("Thiết lập quyền yêu cầu theo nhóm hàng cho bộ phận", {
+    adminWeb: true,
+  })
+  @Post("group-eligibility")
+  @RequirePermissions("eligibility.manage")
+  uge(@CurrentUser() u: AuthUser, @Body() d: UpsertGroupEligibilityDto) {
+    return this.s.upsertGroupEligibility(u, d);
   }
   @ApiEndpoint("Xem quy tắc chọn nguồn cấp", { adminWeb: true })
   @Get("source-rules")

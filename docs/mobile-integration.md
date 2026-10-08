@@ -90,6 +90,8 @@ Gọi song song:
 
 Không giả định tài khoản chỉ thuộc một chi nhánh. Selector phải lọc theo grant scope trả về từ server và kết quả endpoint.
 
+Nếu `GET /me` trả `kind=SUPPLIER`, app chuyển sang không gian Nhà cung cấp và chỉ tải `GET /supplier/orders`, thông báo và thiết bị push. Không tải tồn kho, danh mục nội bộ hoặc đơn của nhà cung cấp khác.
+
 ## 3. Màn hình và endpoint
 
 | Màn hình Mobile  | Endpoint chính                                                                                                     | Permission tiêu biểu                          |
@@ -102,6 +104,7 @@ Không giả định tài khoản chỉ thuộc một chi nhánh. Selector phả
 | Báo hỏng         | `GET/POST /damage-reports`, `PUT /damage-reports/{id}`, command submit                                             | `damage.*`                                    |
 | Tồn kho          | `GET /stock-balances`, `GET /stock-ledger`                                                                         | `stock.read`, `stock_ledger.read`             |
 | Thông báo        | `GET /notifications`, detail, read, read-all                                                                       | `notification.*`                              |
+| Đơn nhà cung cấp | `GET /supplier/orders`, `GET /supplier/orders/{id}`                                                                | `supplier_order.read_own`                     |
 
 Mobile **không gọi** API cấu hình user/role/cơ sở/danh mục/nguồn, duyệt yêu cầu, duyệt điều chuyển, xử lý chênh lệch, payment, report, iPOS, audit hoặc health readiness.
 
@@ -109,9 +112,9 @@ Mobile **không gọi** API cấu hình user/role/cơ sở/danh mục/nguồn, d
 
 ### Bước A — tải nguyên liệu được phép xin
 
-`GET /item-eligibility?facility_id=<uuid>&department_id=<uuid>&page_size=100`
+`GET /item-eligibility?facility_id=<uuid>&department_id=<uuid>&effective=true&page_size=100`
 
-Chỉ hiển thị dòng `active=true`. Danh sách hợp lệ là giao của eligibility, quyền/scope tài khoản và nguyên liệu đang active. Mobile không gửi supplier hoặc kho nguồn trong request.
+Backend trả danh sách hiệu lực sau khi gộp quyền theo nhóm hàng và ngoại lệ từng nguyên liệu. `grantType=GROUP` nghĩa là được cấp theo nhóm; `grantType=INGREDIENT` nghĩa là có cấu hình riêng. Cấu hình riêng luôn ưu tiên, kể cả khi dùng để chặn một mặt hàng trong nhóm. Chỉ hiển thị dòng `active=true`. Mobile không gửi supplier hoặc kho nguồn trong request.
 
 Nếu `maxQuantityPerRequest` khác `null`, đây là hạn mức cho một dòng yêu cầu tính theo `ingredient.baseUnit`. Mobile nên hiển thị hạn mức cạnh nguyên liệu và kiểm tra sớm; backend vẫn quy đổi đơn vị rồi kiểm tra lại khi tạo/sửa phiếu.
 
@@ -205,7 +208,7 @@ Idempotency-Key: mobile:<uuid>
 
 Backend tự phân loại đủ/thiếu/thừa. Nếu thiếu, đơn còn `PARTIAL` và có thể tạo receipt bù lần sau. Nếu thừa, receipt có thể vào `PENDING_EXCESS_REVIEW`; Mobile không tự cộng phần thừa trước quyết định backend. Màn hình lịch sử đọc `GET /receipts`, `GET /receipts/{id}` và `GET /discrepancies?status=OPEN`.
 
-Sau khi tạo receipt và trước hoặc sau khi post, mỗi ảnh được tải trực tiếp từ Mobile lên R2 theo ba bước. Backend không nhận bytes ảnh.
+Sau khi tạo receipt và **trước khi post**, tải ít nhất một ảnh trực tiếp từ Mobile lên R2 theo ba bước. Backend từ chối ghi sổ nếu chưa có ảnh ở trạng thái `READY`; backend không nhận bytes ảnh.
 
 1. Xin presigned URL:
 
@@ -400,8 +403,21 @@ Vẫn poll `GET /notifications` khi app foreground/resume vì push chỉ là tí
 | `INVALID_STATE`                                     | Reload document; trạng thái đã đổi ở thiết bị khác                |
 | `POLICY_NOT_CONFIGURED`                             | Không retry; báo nghiệp vụ chưa được bật ở môi trường hiện tại    |
 
-## 11. Chưa tích hợp trong Mobile v1
+## 11. Không gian Nhà cung cấp trong app chung
+
+Nhà cung cấp đăng nhập bằng cùng màn hình và cơ chế phiên của DICA Mobile. Không tạo app hoặc API đăng nhập riêng.
+
+1. Sau đăng nhập, nếu `kind=SUPPLIER`, kiểm tra permission `supplier_order.read_own`.
+2. Tải `GET /supplier/orders?page=1&page_size=20`.
+3. Mở chi tiết bằng `GET /supplier/orders/{id}`.
+4. Mỗi response đã được backend giới hạn bằng `supplier_id` gắn với tài khoản; mobile không gửi và không cho chọn nhà cung cấp.
+5. Khi nhận push `resource_type=FulfillmentOrder`, tải lại chi tiết từ endpoint nhà cung cấp, không dùng `/orders/{id}`.
+6. Projection nhà cung cấp không có đơn giá, tồn kho, công nợ hoặc dữ liệu nội bộ khi các quyền này chưa được khách chốt.
+
+Mobile v1 cho nhà cung cấp **xem đơn đã phát hành và nhận thông báo đơn mới**. Các thao tác nhận/từ chối đơn, cập nhật đang chuẩn bị/đang giao, nhập lượng giao, chứng từ và thanh toán chưa được bật vì `new-flow.md` chưa chốt.
+
+## 12. Chưa tích hợp trong Mobile v1
 
 - `An toàn`, `Lưu mẫu`, `Truy xuất lô`, app khách hàng, đánh giá và chấm công: phạm vi làm sau.
 - Cấu hình iPOS/recipe, báo cáo tổng hợp, payment, user/role, danh mục và nguồn cấp: chỉ Admin Web.
-- `GET /supplier/orders` và `GET /supplier/orders/{id}`: backend còn giữ contract dự phòng nhưng được gắn nhãn `[CHƯA TÍCH HỢP]`; không làm app/module riêng cho nhà cung ứng theo `flow.md`.
+- Thao tác thay đổi trạng thái đơn từ phía nhà cung cấp: chờ chốt nghiệp vụ; mobile v1 chỉ xem đơn của chính nhà cung cấp.
