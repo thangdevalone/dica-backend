@@ -94,13 +94,11 @@ test("FCM can stay disabled without credentials and requires a service account w
   );
 });
 
-test("R2 credentials and public asset URL are required", () => {
+test("R2 credentials are required without any public asset URL", () => {
   assert.ok(
     envSchema.validate({ ...validEnvironment, R2_SECRET_ACCESS_KEY: "" }).error,
   );
-  assert.ok(
-    envSchema.validate({ ...validEnvironment, R2_PUBLIC_BASE_URL: "" }).error,
-  );
+  assert.equal("R2_PUBLIC_BASE_URL" in validEnvironment, false);
   assert.equal(envSchema.validate(validEnvironment).error, undefined);
 });
 

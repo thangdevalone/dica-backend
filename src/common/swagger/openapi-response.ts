@@ -827,6 +827,7 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       resourceType: { type: "string" },
       resourceId: uuid,
       status: { type: "string", enum: ["UNREAD", "READ"] },
+      requiredPermission: nullable({ type: "string" }),
       readAt: nullable(dateTime),
       createdAt: dateTime,
     },

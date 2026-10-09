@@ -4,6 +4,7 @@
 .env
 .env.*
 node_modules
+.customer-flow-test-db
 dist
 coverage
 test

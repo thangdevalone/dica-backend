@@ -1,211 +1,62 @@
-# DICA — Kết quả review và backlog theo `new-flow.md`
+# Tiến độ DICA Backend
 
-Review cập nhật ngày 2026-10-08. `new-flow.md` là nguồn nghiệp vụ chính; file này chỉ ghi phần chưa có, đang khác flow hoặc phải hỏi khách trước khi chốt. Không tự coi policy demo hay dữ liệu seed là quyết định của khách.
+Cập nhật: 09/10/2026.
 
-## 1. Kết luận review
+Nguồn nghiệp vụ là [câu trả lời khách ngày 08/10](docs/customer-flow-questions-response.md), ưu tiên hơn [new-flow.md](new-flow.md). File này thay backlog cũ; quyết định đã chốt không cần hỏi lại. Chi tiết bằng chứng nằm trong [review](docs/new-flow-implementation-review.md) và [contract mobile](docs/mobile-integration.md).
 
-### Đã khớp phần lõi
+## Trạng thái hiện tại
 
-- Có Web Admin cho tổ chức, tài khoản/RBAC, danh mục, nguồn cung và lịch sử cấu hình.
-- Có flow yêu cầu hàng `DRAFT → SUBMITTED → APPROVED/REJECTED`, tách đơn theo nguồn kho/NCC và giữ snapshot nguồn/quy đổi.
-- Có xuất/nhận nhiều lần, ghi lượng thực nhận, tạo case thiếu/thừa/hỏng, stock ledger, tồn kho và audit/idempotency.
-- Có điều chuyển giữa hai cơ sở khác nhau; Kho tổng ↔ Bếp tổng tự duyệt với policy `NO_MANAGER_APPROVAL`, các tuyến khác qua duyệt, có ETA, lịch sử và thông báo.
-- Có kiểm kê cuối ngày, cảnh báo khi kiểm kê lệch, mapping/định mức/import bán hàng và tính variance ở mức contract/import thủ công.
-- Có báo hỏng, payment tracking cơ bản, notification trong DB và FCM Android/iOS.
-- Ảnh receipt/báo hỏng dùng R2 public read; client upload bằng presigned PUT và xem bằng public asset URL cố định.
-- Có grant quyền yêu cầu theo nhóm hàng cho `facility + department`, tự áp dụng cho nguyên liệu mới trong nhóm và cho phép cấu hình từng nguyên liệu ghi đè.
-- Có một nhà cung cấp ưu tiên đang hoạt động cho mỗi nguyên liệu; nguồn thực tế từng cơ sở vẫn do source rule quyết định.
-- Backend và contract tích hợp cho phép nhà cung cấp dùng chung DICA Mobile, chỉ xem đơn của chính mình và nhận thông báo đơn mới.
-- Phiếu nhận bắt buộc có ít nhất một ảnh `READY` trước khi ghi sổ.
+Backend và Web Admin đã có code cho cấu hình và các quy tắc chính. Chưa hoàn thành toàn bộ sản phẩm: workspace chưa có source mobile; iPOS, ảnh/push thật và xuất PDF cho NCC còn cần triển khai hoặc kiểm thử.
 
-### Chưa khớp hoặc chưa đủ để coi là hoàn thành
+“Đã có” dưới đây nghĩa là có code/API và kiểm tra local, không có nghĩa đã nghiệm thu trên production hoặc thiết bị thật.
 
-- Chưa có nghiệp vụ hoàn hàng.
-- Chưa có `DELETE`; tổ chức/danh mục đang dùng `active=false`. Cần xác nhận “xóa” trong flow có nghĩa là ngừng sử dụng hay xóa cứng.
-- Các policy thiếu/thừa, đóng phần thiếu, báo hỏng, điều chỉnh tồn và payment chưa được khách duyệt; một số action production đang bị chặn bằng `DEMO_POLICY_ENABLED`.
-- Chưa có nhắc thiếu hàng qua ngày, cảnh báo tồn/hao hụt tự động và kết nối iPOS thật.
-- Chưa có ma trận đầy đủ cho người nhận, nội dung và kênh thông báo của từng sự kiện.
-- Không có source code Mobile trong workspace nên review này chỉ xác nhận API, Swagger và tài liệu tích hợp; chưa xác nhận UI/hành vi app thực tế.
+## Theo dõi các task flow
 
-## 2. P0 — Câu hỏi phải chốt với khách
+Giữ mã FLOW để đối chiếu backlog trước đây.
 
-### FLOW-01 — Vai trò, quyền mặc định và nhóm hàng
+| Task                                   | Trạng thái                    | Kết quả và việc còn lại                                                                                                                                                     |
+| -------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FLOW-01 — Quyền và nhóm hàng           | Đã có BE/Web                  | Bộ quyền bootstrap v4, role/grant theo scope, eligibility nhóm và ngoại lệ từng hàng. Khi triển khai phải kiểm tra tài khoản thực tế được cấp đúng quyền.                   |
+| FLOW-02 — Nhà cung cấp                 | Đã có BE/contract             | Dùng chung mobile, chỉ đọc đơn/giá của chính NCC; chặn API nội bộ. Chưa có màn hình mobile để kiểm thử.                                                                     |
+| FLOW-03 — Vòng đời phiếu               | Đã có BE                      | Phiếu từ chối phải tạo mới; hủy đúng quyền trước nhận đã ghi sổ. Nghiệp vụ thực hiện trên mobile, Web chỉ cấu hình.                                                         |
+| FLOW-04 — Hoàn hàng                    | Đã có BE/contract             | Hoàn một phần về nguồn cấp, ảnh hàng cùng hóa đơn, duyệt và chốt tồn/tiền cuối ngày duyệt; có test retry. Còn kiểm thử màn hình mobile.                                     |
+| FLOW-05 — Thiếu/thừa/giao bù           | Đã có BE                      | Bù nhiều lần trong ngày; 00:00 giờ Việt Nam đóng thiếu; thừa cộng tồn; mỗi lần nhận/bù cần 1–10 ảnh.                                                                        |
+| FLOW-06 — Giá/thanh toán               | Đã có BE/Web cấu hình         | Lưu giá NCC, giá chuẩn/ngưỡng, số ngày thanh toán và tùy chọn xác nhận hai người; đối soát theo lượng thực giữ lại.                                                         |
+| FLOW-07 — Báo hỏng/kiểm kê/tồn         | Đã có BE                      | Báo hỏng giảm tồn khi gửi một lần; kiểm kê mù, quyền riêng xem lệch/điều chỉnh, lịch sử lệch đỏ; cho tồn âm.                                                                |
+| FLOW-08 — Điều chuyển                  | Đã có BE                      | Kho tổng ↔ Bếp tổng tự duyệt và thông báo; Chi nhánh ↔ Chi nhánh, Bếp tổng ↔ Chi nhánh cần duyệt; chặn Chi nhánh ↔ Kho tổng trực tiếp; ETA bắt đầu/kết thúc.                |
+| FLOW-09 — Xóa/ngừng sử dụng            | Đã có BE/Web                  | Ngừng sử dụng giữ lịch sử; xóa vĩnh viễn chỉ ADMIN, có preview phạm vi và mật khẩu.                                                                                         |
+| FLOW-10 — NCC ưu tiên/nguồn hàng       | Đã có BE/Web                  | Một NCC ưu tiên hoạt động cho mỗi hàng; nguồn thực tế theo source rule. Không tự đổi nguồn đơn đã duyệt.                                                                    |
+| FLOW-11 — Thông báo                    | Có BE; chưa xong mobile       | Inbox/push theo quyền, nhắc mỗi giờ đến khi đọc; kiểm tra lại quyền trước đọc/gửi. Alarm native và FCM thật chưa nghiệm thu.                                                |
+| FLOW-12 — Phiếu NCC dạng PDF/ảnh       | Chưa triển khai               | Cần mẫu phiếu và endpoint xuất được phân quyền; JSON/CSV không thay thế yêu cầu này.                                                                                        |
+| FLOW-13 — Thiếu hàng qua ngày          | Đã có BE theo quyết định mới  | Worker đóng phần thiếu từ 00:00, không tiếp tục giao bù sang ngày mới; có retry/test. Backlog cũ về giữ thiếu qua ngày đã được thay thế.                                    |
+| FLOW-14 — iPOS thật                    | Chờ tích hợp                  | Có mapping/định mức/import thủ công và hủy bản ghi import có audit/thông báo; chưa có adapter iPOS hoặc mapping hủy toàn hóa đơn.                                           |
+| FLOW-15 — Cảnh báo tồn/hao hụt tự động | Chưa hoàn thành               | Rule mới đang `testOnly=true`, `active=false`; chưa có job đánh giá và gửi cảnh báo vận hành theo rule. Cảnh báo lệch kiểm kê và cảnh báo giá là các chức năng riêng đã có. |
+| FLOW-16 — Ảnh chứng từ                 | Có BE/contract; cần test thật | R2 private, upload presigned/finalize, đọc qua API Bearer và quyền tài nguyên; thời hạn 6–12 tháng. Nghiệp vụ ảnh nằm ở mobile; Web chỉ cấu hình chính sách.                |
+| FLOW-17 — Chất lượng Web/hướng dẫn     | Đạt kiểm tra local            | Bỏ modern-tour; hướng dẫn 6 bước, 19 link đúng route/tab; lint/typecheck/build đạt. Chưa kiểm thử màn hình nhỏ trên thiết bị.                                               |
 
-**Hiện tại:** Có role mẫu Owner, Quản lý tổng, Quản lý/Nhân viên chi nhánh, Nhân viên kho và grant theo organization/facility/stock location/department/own. Eligibility hỗ trợ cấp theo nhóm tại `facility + department`, tự áp dụng cho mặt hàng mới và cho phép cấu hình từng nguyên liệu ghi đè.
+## Việc còn phải làm
 
-**Hỏi khách:**
+- [ ] Mobile: triển khai/đối chiếu màn hình nghiệp vụ, không gian NCC, camera/ảnh, version/idempotency khi retry và alarm native Android/iOS.
+- [ ] iPOS: lấy giao thức và môi trường thử; mapping cơ sở/món/hóa đơn; adapter incremental/idempotent; kiểm thử hủy toàn hóa đơn có audit/thông báo. Hoàn món/combo ngoài phạm vi hiện tại.
+- [ ] Cảnh báo tồn/hao hụt: chốt ngưỡng/lịch/cooldown/người nhận còn thiếu, triển khai job và test dedupe/quyền; chỉ bật rule vận hành khi đã kiểm thử.
+- [ ] Phiếu NCC ngoài app: chốt mẫu hóa đơn/PDF/ảnh và triển khai export đúng phạm vi, không lộ dữ liệu nội bộ.
+- [ ] Hạ tầng thật: smoke test upload/read/expire R2 private, FCM/APNs, worker 00:00, reminder và thu hồi quyền; kiểm tra public domain R2 đã tắt.
+- [ ] Nghiệm thu: test toàn luồng trên thiết bị và tài khoản thực tế, kiểm tra quyền, backup/restore và theo dõi log sau deploy.
 
-- Chốt ma trận role × permission mặc định; ai được duyệt, sửa/xóa, xem report, variance, damage và nhận thông báo.
-- Chủ có “toàn quyền nghiệp vụ” hay cả quyền vận hành như backup/restore.
-- Có cần thêm grant nhóm hàng trực tiếp theo từng user/role ngoài cấu hình hiện tại theo bộ phận không.
+## Kết quả kiểm tra local
 
-**Sau khi chốt:** Nếu cần cấp trực tiếp theo user/role, bổ sung scope tương ứng mà không làm mất cấu hình theo bộ phận hiện có.
+Ngày 09/10/2026:
 
-### FLOW-02 — Thao tác mở rộng của nhà cung cấp
+- Backend: typecheck/build/format đạt; 76/76 test đạt trên PostgreSQL riêng đã migrate, không bỏ qua test.
+- Web: lint/typecheck/build đạt; kiểm tra hướng dẫn trên trình duyệt desktop và đối chiếu 19 link.
+- OpenAPI lịch sử `/audit-events` có audience BOTH; audit dependency production không phát hiện lỗ hổng ở cả hai repo.
+- Migration `202610090005_notification_permission` đã áp dụng vào database local và test; bootstrap quyền hiện hành là v4.
 
-**Hiện tại:** Đã chốt NCC dùng chung DICA Mobile. Backend có tài khoản/role NCC, `/supplier/orders`, cô lập theo `supplier_id`, thông báo đơn mới và deep link riêng. Contract Mobile v1 chỉ cho xem đơn; workspace chưa có source Mobile để triển khai/kiểm tra màn hình thực tế.
+## Release và CI
 
-**Hỏi khách:**
+- [x] Cấu hình CI Backend có PostgreSQL test, migrate và `TEST_DATABASE_URL` để chạy test flow.
+- [x] Compose Backend chạy migrate và bootstrap trước khi bật API. Migration 005 thuộc lần phát hành này.
+- [ ] Xác nhận GitHub Actions của commit mới chạy thành công.
+- [ ] Xác nhận deploy production, healthcheck và smoke test sau deploy.
 
-- NCC có cần bấm nhận/từ chối đơn không.
-- Có cần trạng thái đang chuẩn bị/đang giao, nhập lượng giao và đính kèm chứng từ không.
-- NCC có được xem đơn giá, công nợ hoặc cập nhật thông tin thanh toán không.
-
-**Sau khi chốt:** Mở thêm permission, command API, trạng thái và màn hình Mobile tương ứng; không suy diễn từ quyền xem đơn.
-
-### FLOW-03 — Vòng đời phiếu và nơi duyệt
-
-**Hiện tại:** Yêu cầu hàng cho sửa draft, submit, approve, reject, revise phiếu rejected và cancel khi draft/submitted/rejected. Điều chuyển có draft/update/submit/approve/reject/cancel. Duyệt đang có trên Admin Web; API vẫn dùng được cho client được cấp quyền.
-
-**Hỏi khách:**
-
-- Quản lý tổng/Chủ duyệt trên Web, Mobile hay cả hai; Mobile có cần xác thực bổ sung không.
-- Phiếu bị từ chối được sửa chính phiếu hay tạo revision/phiếu mới; lịch sử nào phải hiển thị.
-- Ai được hủy và được hủy ở trạng thái nào; có cho sửa/đổi nguồn sau duyệt không.
-- Có luồng “yêu cầu sửa” riêng ngoài reject không.
-
-**Sau khi chốt:** Chốt state machine, permission, Swagger audience, notification và test version/idempotency.
-
-### FLOW-04 — Hoàn hàng
-
-**Hiện tại:** Chưa có model, API hoặc màn hình hoàn hàng.
-
-**Hỏi khách:**
-
-- Hoàn về kho tổng, cơ sở khác hay NCC; có thể hoàn một phần không.
-- Ai tạo, duyệt, giao và xác nhận nhận lại; ảnh/chứng từ có bắt buộc không.
-- Khi nào trừ tồn bên trả, cộng tồn bên nhận và điều chỉnh payment/công nợ.
-- Hàng hỏng có được hoàn chung flow hay là nghiệp vụ riêng.
-
-**Sau khi chốt:** Thiết kế state machine, permission, ledger, payment reconciliation, attachment, API Mobile/Web, notification và test retry.
-
-### FLOW-05 — Thiếu/thừa và giao bù
-
-**Hiện tại:** Có discrepancy, nhận bù nhiều lần, resolve case và đóng lượng còn thiếu; resolution vẫn là chuỗi tự do và một số action bị khóa production.
-
-**Hỏi khách:**
-
-- Thiếu quá ngày: tiếp tục giao bù, hủy phần thiếu, đổi nguồn hay ghi công nợ.
-- Thừa: nhận thêm vào tồn, trả lại hay treo chờ xử lý; thời điểm nào được post tồn.
-- Ai được resolve/đóng phần còn lại và có bắt buộc khác người lập/nhận không.
-- Ảnh bắt buộc với mọi lần nhận hay chỉ khi có sai lệch; số ảnh tối thiểu/tối đa.
-
-**Sau khi chốt:** Dùng enum resolution + lịch sử, cập nhật order/receipt/ledger/payment atomically và bỏ chặn policy production tương ứng.
-
-### FLOW-06 — Payment và công nợ
-
-**Hiện tại:** Chỉ có `UNPAID/PARTIAL/PAID`, giá trị đối soát theo thực nhận và số đã trả; chưa có hạn trả, phương thức, mã giao dịch hoặc chứng từ.
-
-**Hỏi khách:**
-
-- Bộ trạng thái chính thức có quá hạn, hủy, hoàn tiền hoặc điều chỉnh không.
-- Ai nhập đơn giá và ai cập nhật thanh toán; có cần tách người nhập/người xác nhận không.
-- Cách tính lại khi giao bù, trả hàng, nhận thừa hoặc đóng phần thiếu.
-- Có lưu ngày đến hạn, phương thức, mã giao dịch và ảnh chứng từ thanh toán không.
-
-**Sau khi chốt:** Mở rộng schema/API/report/audit và bảo đảm số đã trả không vượt giá trị đối soát sau điều chỉnh.
-
-### FLOW-07 — Báo hỏng, hao hụt và điều chỉnh tồn
-
-**Hiện tại:** Báo hỏng có draft/submit/confirm nhưng confirm không tự trừ tồn và production mặc định chặn. Stocktake ghi snapshot/chênh lệch nhưng không tự điều chỉnh tồn.
-
-**Hỏi khách:**
-
-- Báo hỏng có cần duyệt/từ chối không; ai xác nhận và lúc nào trừ tồn.
-- Chênh lệch kiểm kê có tự tạo phiếu điều chỉnh hay cần duyệt thủ công.
-- Có cho tồn âm không; ai được approve/post adjustment; có bắt buộc tách người lập và duyệt không.
-- Hao hụt cần xem theo lượng, phần trăm, giá trị tiền hay cả ba.
-
-**Sau khi chốt:** Chốt policy có version, ledger/audit/notification và bật production theo đúng quyền.
-
-### FLOW-08 — Phạm vi tuyến điều chuyển
-
-**Hiện tại:** Module transfer cho phép hai cơ sở khác nhau điều chuyển. Kho tổng ↔ Bếp tổng tự duyệt; các tuyến khác chuyển sang `SUBMITTED` để người có quyền duyệt. Luồng xin hàng từ Kho tổng vẫn nằm ở request/order, không phải transfer.
-
-**Hỏi khách:**
-
-- Có thực sự cho phép Chi nhánh ↔ Kho tổng/Bếp tổng ngoài luồng xin hàng không; hiện backend đang cho phép theo nghĩa rộng của “giữa các cơ sở”.
-- Bên nào tạo phiếu; `expected_arrival_at` là thời điểm dự kiến hay một khoảng giờ bắt đầu/kết thúc.
-- Khi tuyến không phải Kho tổng ↔ Bếp tổng, tất cả đều cần Quản lý tổng duyệt hay có ngoại lệ khác.
-
-**Sau khi chốt:** Thu hẹp validation nếu khách không cho một số cặp cơ sở; mở rộng model ETA nếu cần và test từng cặp facility.
-
-### FLOW-09 — Xóa hay ngừng sử dụng cấu hình
-
-**Hiện tại:** Facility, kho, bộ phận, nguyên liệu, nhóm, đơn vị và NCC dùng soft deactivate qua `active`; không có DELETE do dữ liệu đã được lịch sử nghiệp vụ tham chiếu.
-
-**Hỏi khách:**
-
-- “Xóa” trong flow có chấp nhận là ngừng sử dụng/ẩn khỏi lựa chọn không.
-- Bản ghi chưa từng phát sinh giao dịch có được xóa cứng không; ai có quyền khôi phục.
-- Khi deactivate facility/NCC/ingredient, phiếu draft và source rule đang dùng phải xử lý thế nào.
-
-**Khuyến nghị:** Giữ soft delete làm mặc định để không mất lịch sử; UI dùng nhãn “Ngừng sử dụng”.
-
-### FLOW-10 — NCC ưu tiên và quy tắc nguồn hàng
-
-**Hiện tại:** Một nguyên liệu có nhiều `SupplierIngredient` và tối đa một liên kết đang hoạt động được đánh dấu `isPreferred`; API/UI đưa NCC ưu tiên lên đầu. Mỗi `facility + ingredient` vẫn có một `SourceRule` trỏ đến kho hoặc một NCC; đánh dấu ưu tiên không tự đổi nguồn đã cấu hình.
-
-**Hỏi khách:**
-
-- NCC ưu tiên có cần tự được chọn khi tạo source rule mới hay chỉ hiển thị/đánh dấu trước như hiện tại.
-- Có cần nhiều mức ưu tiên/fallback khi NCC chính hết hàng không; hệ thống tự đổi hay phải người có quyền duyệt.
-- Bulk chuyển NCC áp dụng cho cấu hình tương lai hay cả đơn đã duyệt/chưa giao.
-
-**Sau khi chốt:** Nếu cần, bổ sung nhiều mức ưu tiên/fallback; không tự đổi nguồn của đơn lịch sử nếu chưa có quy tắc rõ ràng.
-
-### FLOW-11 — Ma trận thông báo
-
-**Hiện tại:** Có notification cho request, transfer, receipt discrepancy, stocktake lệch và damage; có DB inbox + FCM. Chưa có reminder thiếu hàng qua ngày, payment/return và cảnh báo tồn/variance chạy tự động.
-
-**Hỏi khách:**
-
-- Với từng sự kiện, ai nhận theo role/permission/scope và qua inbox, push, email hay Zalo.
-- Giờ gửi, timezone, quiet hours, tần suất nhắc lại và điều kiện dừng.
-- Nội dung có được chứa số lượng/giá/NCC trên màn hình khóa không.
-
-**Sau khi chốt:** Lập bảng event × recipient × channel × template × dedupe key và test thu hồi quyền trước khi đọc notification.
-
-## 3. P1 — Việc triển khai sau khi có câu trả lời
-
-### FLOW-12 — Phiếu gửi NCC dạng PDF/ảnh
-
-Web hiện xuất CSV phía client. Cần chốt mẫu, logo, địa chỉ giao, đơn giá, ghi chú và quyền export; sau đó tạo PDF/print view không lộ tồn kho, payment, request cha hoặc audit nội bộ.
-
-### FLOW-13 — Nhắc đơn thiếu qua ngày
-
-Tạo scheduled job theo giờ/timezone đã chốt, chỉ lấy discrepancy shortage còn mở, lưu notification trước khi push và dedupe theo `discrepancy + business_date`.
-
-### FLOW-14 — Kết nối iPOS thật
-
-Khách cần cung cấp API/webhook/file, credentials test, mã cơ sở/món/hóa đơn, quy tắc hủy/hoàn/combo và checkpoint. Adapter phải incremental, idempotent và không coi dữ liệu thiếu là 0.
-
-### FLOW-15 — Cảnh báo tồn kho/hao hụt tự động
-
-Chốt ngưỡng tuyệt đối/%/số ngày tồn, lịch chạy, cooldown và người nhận. Rule active phải tạo notification có resource hợp lệ, có lịch sử chạy và không spam.
-
-### FLOW-16 — Gallery ảnh trên Admin Web
-
-Backend đã trả public `viewUrl` cố định. Web cần preview/tải ảnh receipt và damage, có loading/placeholder/retry; không cần renew URL hoặc gửi Bearer token khi tải ảnh.
-
-### FLOW-17 — Hoàn thiện cảnh báo lint Web
-
-**Hiện tại (2026-10-08):** Web typecheck/build đạt; ESLint có 0 error và 105 warning, chủ yếu là `react-hooks/set-state-in-effect` và import/biến không dùng.
-
-Giữ `npm run lint` không warning ở các file sửa và không làm đổi hành vi permission-gated tab/deep link.
-
-## 4. Ngoài phạm vi theo `flow.md`
-
-- App riêng cho NCC; nhà cung cấp dùng một không gian giới hạn quyền trong app DICA chung.
-- App khách hàng, đặt món, đánh giá.
-- Chấm công và quy trình vận hành nhà hàng.
-- Phần mềm bán hàng thay thế iPOS.
-
-## 5. Definition of Done chung
-
-1. Quyết định nghiệp vụ được ghi người xác nhận, ngày và ảnh hưởng schema/API/client/test.
-2. Migration tương thích ngược nếu đổi database; permission/scope được kiểm tra tại backend.
-3. Swagger có request, response, error và audience Mobile/Admin Web đúng thực tế.
-4. Mobile/Web contract và tài liệu tích hợp được cập nhật; notification lưu DB trước khi push.
-5. Có test happy path, scope, invalid state, version conflict, idempotency/retry và dữ liệu lịch sử.
-6. Typecheck, test, build, format và CI đạt.
+Push `main` kích hoạt CI, build image và deploy nếu environment/secrets production đủ điều kiện. Hai mục cuối chỉ đánh dấu hoàn thành khi có kết quả thực tế; kiểm tra local không thay thế CI/deploy.

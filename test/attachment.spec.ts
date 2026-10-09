@@ -103,7 +103,6 @@ test("presigned URL bắt buộc đúng type, size và không cho ghi đè", asy
       R2_ACCESS_KEY_ID: "access-key-id",
       R2_SECRET_ACCESS_KEY: "secret-access-key",
       R2_BUCKET: "dica-attachments",
-      R2_PUBLIC_BASE_URL: "https://assets.example.com",
       R2_UPLOAD_URL_TTL_SECONDS: 600,
     }),
   );

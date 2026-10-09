@@ -14,7 +14,9 @@ export class SystemController {
   constructor(private readonly service: SystemService) {}
 
   @Get("audit-events")
-  @ApiEndpoint("Xem nhật ký thao tác và thay đổi hệ thống", { adminWeb: true })
+  @ApiEndpoint("Xem nhật ký thao tác và thay đổi hệ thống", {
+    audience: "both",
+  })
   @RequirePermissions("audit.read")
   audits(@CurrentUser() user: AuthUser, @Query() query: AuditQueryDto) {
     return this.service.audits(user, query);

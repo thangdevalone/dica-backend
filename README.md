@@ -1,50 +1,76 @@
 # DICA Backend
 
-Backend NestJS dạng modular monolith cho web quản trị và ứng dụng DICA. API dùng REST tại `/api/v1`, tài liệu OpenAPI tại `/docs` và `/openapi.json`. OpenAPI có request/response/error schema đầy đủ cùng metadata phân loại Mobile/Admin Web để sinh client.
+Backend quản lý cấu hình, cấp hàng và tồn kho DICA. Web dành cho cấu hình; mobile dùng API tạo, duyệt và xử lý nghiệp vụ. Nhà cung cấp dùng chung app, chỉ xem đơn và giá thuộc nhà cung cấp của mình.
 
-## Thành phần đã triển khai
+Backend dùng NestJS, Prisma và PostgreSQL. REST API có prefix `/api/v1`; Swagger `/docs` và OpenAPI `/openapi.json` có khi bật `SWAGGER_ENABLED=true`.
 
-- Xác thực JWT access/refresh, session có thể thu hồi, rate limit đăng nhập.
-- RBAC theo permission và grant nguyên khối; kiểm tra scope tại server.
-- Cơ sở, kho, bộ phận; nguyên liệu, nhóm, đơn vị, nhà cung ứng.
-- Quy đổi theo nguyên liệu có phiên bản/thời gian hiệu lực và kiểm tra chồng lấn.
-- Eligibility và source rule có revision/lịch sử, cập nhật hàng loạt all-or-nothing.
-- Yêu cầu hàng: draft, submit, duyệt/từ chối; snapshot nguồn/quy đổi; tự tách đơn theo nguồn.
-- Projection riêng cho nhà cung ứng; không lộ request, tồn kho, audit hoặc payment nội bộ.
-- Xuất/nhận từng phần, giao bù; ledger bất biến, balance cache, transaction, idempotency, audit và outbox.
-- Điều chuyển theo tuyến được phép và khoảng giờ nhận; kiểm kê snapshot; báo hỏng ghi giảm một lần; điều chỉnh tồn có duyệt/post; cho phép tồn vật lý âm.
-- Chốt thiếu và hoàn hàng lúc 00:00 theo giờ Việt Nam; đối soát theo lượng thực giữ lại; cấu hình giá chuẩn, lưu ảnh riêng tư 6–12 tháng và xác nhận thanh toán hai người.
-- Import bán hàng thủ công, mapping món, định mức version và tính hao hụt có kiểm tra dữ liệu thiếu.
-- Báo cáo tồn/đơn/hao hụt/hỏng/payment; thông báo kiểm tra lại quyền; health live/ready; migration và seed demo.
-- Logger Pino có request ID, log JSON ở production, log dễ đọc khi development và tự che dữ liệu nhạy cảm.
-- Mọi thay đổi cấu hình admin hiện có đều ghi lịch sử tập trung, gồm người thao tác, request, dữ liệu vào/kết quả và thời gian.
-- Mọi API danh sách đều phân trang mặc định; hỗ trợ offset đầy đủ metadata và cursor không `COUNT(*)` cho dữ liệu lớn.
+## Flow hiện hành
 
-Quyết định nghiệp vụ hiện hành là [câu trả lời của khách ngày 08/10/2026](docs/customer-flow-questions-response.md); khi mâu thuẫn, ưu tiên quyết định này hơn `flow.md`/`new-flow.md` và các đánh giá cũ trong `TASK.md`. Tài liệu bàn giao cho Mobile nằm tại [docs/mobile-integration.md](docs/mobile-integration.md). Web dành cho cấu hình; nghiệp vụ vận hành và duyệt thực hiện trên mobile.
+[Câu trả lời khách ngày 08/10/2026](docs/customer-flow-questions-response.md) được ưu tiên hơn mô tả ban đầu trong [new-flow.md](new-flow.md).
 
-Các tài liệu kỹ thuật còn lại được tách theo mục đích: [kiến trúc](docs/architecture.md), [quyết định](docs/decisions.md), [deploy VPS](docs/deployment-vps.md) và [vận hành](docs/operations.md). Swagger tại `/docs` là API contract thực thi.
+```mermaid
+flowchart TD
+  A[Admin cấu hình Web] --> B[Tạo phiếu trên mobile]
+  B --> C[Quản lý hoặc Chủ duyệt]
+  C --> D[Kho hoặc NCC giao]
+  D --> E[Nhận, kiểm đếm và chụp ảnh]
+  E --> F[Nhập tồn theo số thực nhận]
+  F --> G[Giao bù trong ngày]
+  G --> H[00:00 đóng phần thiếu]
+  F --> I[Hoàn hàng được duyệt]
+  I --> J[00:00 chốt hoàn hàng]
+  H --> K[Đối soát theo hàng thực giữ lại]
+  J --> K
+```
+
+- Phiếu bị từ chối phải tạo mới. Phiếu đã duyệt không sửa hàng/số lượng/nguồn; người có quyền chỉ được hủy trước lần nhận hàng đã ghi sổ.
+- Bù nhiều lần trong ngày; từ 00:00 kết thúc ngày cần hàng, phần thiếu bị đóng và không tính tiền.
+- Nhận thừa được cộng tồn. Mỗi lần nhận/giao bù cần 1–10 ảnh.
+- Kho tổng ↔ Bếp tổng tự duyệt khi gửi, vẫn thông báo. Chi nhánh ↔ Chi nhánh và Bếp tổng ↔ Chi nhánh cần duyệt; không điều chuyển trực tiếp Chi nhánh ↔ Kho tổng. Xin hàng từ kho tổng vẫn dùng flow cấp hàng.
+- Hoàn về nguồn đã cấp, chốt tồn/hóa đơn cuối ngày duyệt. Báo hỏng giảm tồn một lần khi gửi; xác nhận không trừ lần nữa.
+- Kiểm kê chỉ nhập số thực tế; quyền riêng để xem lệch/điều chỉnh. Cho phép tồn vật lý âm.
+- ADMIN đặt giá chuẩn, ngưỡng, xác nhận thanh toán hai người và lưu ảnh 6–12 tháng.
+- Ảnh riêng tư; thông báo nhắc mỗi giờ khi chưa đọc và còn quyền tài nguyên.
 
 ## Chạy local
 
-Yêu cầu Node.js 22.22.3+, 24.15+ hoặc 26+ và PostgreSQL 17+. Có thể dùng PostgreSQL cài trực tiếp trên máy hoặc container Docker.
+Yêu cầu Node.js 24.15+ và PostgreSQL 17. Database phải tồn tại trước khi migrate.
 
-1. Sao chép `.env.example` thành `.env`, thay hai JWT secret và mật khẩu seed.
-2. Cấu hình `DATABASE_URL` trỏ tới database PostgreSQL local, ví dụ `postgresql://user:password@localhost:5432/dica?schema=public`. Database phải tồn tại trước khi migrate.
-3. Nếu không dùng PostgreSQL local, có thể chạy container tùy chọn: `docker compose up -d postgres`.
-4. Cài dependency: `npm install`.
-5. Chạy migration: `npm run db:migrate`.
-6. Tạo dữ liệu demo: `npm run db:seed`.
-7. Chạy API: `npm run start:dev`.
+1. Chạy `npm ci`, sao chép `.env.example` thành `.env`.
+2. Điền `DATABASE_URL`, hai JWT secret khác nhau, thông tin R2 và `BOOTSTRAP_ADMIN_PASSWORD` tối thiểu 12 ký tự. Thay toàn bộ placeholder.
+3. Chạy:
 
-Tài khoản demo lấy tên và mật khẩu từ `BOOTSTRAP_ADMIN_USERNAME` và `BOOTSTRAP_ADMIN_PASSWORD`; tài khoản nhà cung cấp là `supplier.a` và dùng cùng mật khẩu. Seed chỉ dùng mật khẩu mặc định `DicaDemo#2026` khi không phải production. Bộ biến `BOOTSTRAP_ORGANIZATION_*` và `BOOTSTRAP_ADMIN_*` được dùng thống nhất cho cả bootstrap production và seed demo/local.
+```bash
+npm run db:migrate
+npm run build
+node --env-file=.env dist/scripts/bootstrap.js
+npm run start:dev
+```
 
-Seed được thiết kế để chạy lại an toàn bằng `npm run db:seed`. Nếu cần xóa toàn bộ dữ liệu local rồi dựng lại từ đầu, dùng `npx prisma migrate reset --force`; lệnh này chỉ nên chạy với database development vì sẽ xóa dữ liệu trước khi migrate và seed lại.
+Bootstrap tạo tổ chức/admin nếu chưa có và cập nhật bộ quyền gốc v4; không đổi mật khẩu admin đã tồn tại. Tên tài khoản/mã tổ chức lấy từ `BOOTSTRAP_ADMIN_USERNAME` và `BOOTSTRAP_ORGANIZATION_CODE`.
 
-`LOG_LEVEL` điều khiển mức log (`fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`). Client có thể gửi `x-request-id`; nếu hợp lệ server sẽ giữ nguyên, nếu không server tự sinh và trả lại trong header/response.
+API mặc định ở `http://localhost:3000/api/v1`. Web dùng `http://localhost:3001`; đặt URL này trong `CORS_ORIGINS`. Nếu cần dữ liệu demo, chạy `npm run db:seed` trên database development. Không seed demo trên production.
 
-Phân trang mặc định dùng `page=1&page_size=20`, tối đa 100 bản ghi. Với audit, ledger hoặc danh sách lớn, dùng `pagination_mode=cursor&page_size=50`; gửi `next_cursor` của response vào `cursor` ở request tiếp theo.
+## Ảnh và thông báo
 
-## Kiểm tra
+R2 cần `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`. Bucket riêng tư, tắt `r2.dev` và public custom domain cũ; không cần `R2_PUBLIC_BASE_URL`. Mobile upload presigned PUT, finalize rồi đọc qua API với Bearer token.
+
+Giữ `FCM_ENABLED=false` khi chưa cấu hình Firebase. Để gửi push, cấu hình biến FCM và APNs cho iOS. Inbox vẫn hoạt động khi FCM tắt; alarm native cần app triển khai và kiểm thử.
+
+Worker chạy mỗi 30 giây để chốt thiếu/hoàn, nhắc thông báo và dọn ảnh hết hạn. Thời hạn nghiệp vụ dùng giờ Việt Nam. Migrate trước khi chạy API; khi worker lỗi, kiểm tra `npx prisma migrate status` và nguyên nhân trong log.
+
+## Quy ước API
+
+- Request thường dùng `snake_case`, entity response dùng `camelCase`; lấy đúng schema endpoint.
+- Lượng/tiền là chuỗi thập phân; ngày `YYYY-MM-DD`, datetime ISO-8601 có timezone.
+- Command có version cần `expected_version`; endpoint yêu cầu idempotency cần `Idempotency-Key`, giữ nguyên key/payload khi retry.
+- Thành công gồm `success`, `data`, `message`, `request_id`, `timestamp`; danh sách có `meta` phân trang.
+- Lỗi gồm `success=false`, `code`, `message`, `details` nếu có và `request_id` để tra log.
+- Backend kiểm tra permission/scope; giá/chênh lệch có thể bị loại khỏi response nếu thiếu quyền xem.
+
+Xem payload, trạng thái và retry trong [mobile-integration.md](docs/mobile-integration.md). Nhãn Mobile/Web trên Swagger không thay thế kiểm tra quyền.
+
+## Kiểm thử
 
 ```bash
 npm run typecheck
@@ -53,35 +79,16 @@ npm run build
 npm run format:check
 ```
 
-## Deploy VPS
+Test flow cần PostgreSQL riêng đã migrate. Đặt `TEST_DATABASE_URL` tới database test trước khi chạy `npm test`; không dùng database production. Thiếu biến này thì integration test bị bỏ qua. `.customer-flow-test-db` là dữ liệu test local, không commit.
 
-Image production, Docker Compose và workflow GitHub Actions/GHCR được mô tả tại [docs/deployment-vps.md](docs/deployment-vps.md). File cấu hình mẫu là `.env.production.example`; không commit `.env.production` hoặc secret thật.
+## CI và deploy
 
-## Quy ước response
+Pull request chạy kiểm tra, migrate PostgreSQL test rồi chạy test. Push vào `main` tiếp tục build image GHCR và deploy qua SSH nếu environment `production` cùng secret VPS đã cấu hình. Environment có thể yêu cầu duyệt deploy.
 
-Thành công:
+Compose chạy `db:migrate` và `db:bootstrap` trước khi bật API. `.env.production` nằm trên VPS; xem [hướng dẫn deploy](docs/deployment-vps.md). Không commit secret, dữ liệu PostgreSQL hoặc ảnh chứng từ.
 
-```json
-{
-  "success": true,
-  "message": "Tạo bản nháp yêu cầu hàng thành công.",
-  "data": {},
-  "request_id": "a-request-id",
-  "timestamp": "2026-10-02T00:00:00.000Z"
-}
-```
+## Tình trạng triển khai
 
-Lỗi:
+Web, API và contract mobile đã được đối chiếu; [review hiện hành](docs/new-flow-implementation-review.md) ghi rõ bằng chứng. Theo dõi phần đã có và việc còn lại trong [TASK.md](TASK.md).
 
-```json
-{
-  "success": false,
-  "code": "VERSION_CONFLICT",
-  "message": "Phiếu đã được cập nhật. Vui lòng tải lại.",
-  "details": {},
-  "request_id": "a-request-id",
-  "timestamp": "2026-10-02T00:00:00.000Z"
-}
-```
-
-Quantity/price gửi bằng chuỗi thập phân; thời gian ISO-8601; ngày nghiệp vụ `YYYY-MM-DD`. Request/transfer approve, dispatch/receipt post, adjustment post, sales-import commit và payment update bắt buộc có `Idempotency-Key`.
+Workspace chưa có source mobile. iPOS thật, alarm native, R2/FCM thật và mẫu hóa đơn/PDF cần kiểm thử hoặc triển khai với ứng dụng/dịch vụ tương ứng. Backend hiện có import bán hàng thủ công và hủy bản ghi import, chưa xác nhận nhận hóa đơn iPOS production.

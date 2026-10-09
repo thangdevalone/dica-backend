@@ -19,6 +19,23 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      DATABASE_URL: postgresql://dica_test:dica_ci_password@localhost:5432/dica_test?schema=public
+      TEST_DATABASE_URL: postgresql://dica_test:dica_ci_password@localhost:5432/dica_test?schema=public
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dica_test
+          POSTGRES_USER: dica_test
+          POSTGRES_PASSWORD: dica_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dica_test -d dica_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -37,6 +54,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Apply migrations to test database
+        run: npm run db:migrate
 
       - name: Test
         run: npm test

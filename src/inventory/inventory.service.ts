@@ -161,7 +161,12 @@ export class InventoryService {
   ): Promise<string[]> {
     const notifications = await this.db.notification.findMany({
       where,
-      select: { id: true, resourceType: true, resourceId: true },
+      select: {
+        id: true,
+        resourceType: true,
+        resourceId: true,
+        requiredPermission: true,
+      },
     });
     if (notifications.length === 0) return [];
 
@@ -434,9 +439,26 @@ export class InventoryService {
         allowed.add(`SalesRecord:${resource.id}`);
     }
 
+    const orderScopes = new Map(
+      orders.map((order) => [
+        order.id,
+        {
+          facilityId: order.destinationStockLocation.facilityId,
+          stockLocationId: order.destinationStockLocationId,
+        },
+      ]),
+    );
     return notifications
       .filter(
         (notification) =>
+          (!notification.requiredPermission ||
+            this.scope.canAccess(
+              u,
+              notification.requiredPermission,
+              notification.resourceType === "FulfillmentOrder"
+                ? (orderScopes.get(notification.resourceId) ?? {})
+                : {},
+            )) &&
           (u.kind !== "SUPPLIER" ||
             notification.resourceType === "FulfillmentOrder") &&
           allowed.has(

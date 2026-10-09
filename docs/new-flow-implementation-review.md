@@ -1,93 +1,76 @@
-# Review triển khai theo `new-flow.md`
+# Review flow DICA
 
-Ngày review: 08/10/2026.
+Ngày review: 09/10/2026. Phạm vi: Backend, Web Admin và contract mobile; workspace không có source mobile.
 
-## 1. Kết luận
+## Kết luận
 
-- `new-flow.md` được giữ nguyên và tiếp tục là nguồn yêu cầu gốc.
-- Web Admin và Backend **đã khớp contract** đối với các phần triển khai trong đợt này: quyền xin hàng theo nhóm, ngoại lệ từng mặt hàng, nhà cung cấp ưu tiên và số điện thoại bắt buộc.
-- Backend và tài liệu Mobile **đã khớp contract** cho flow Mobile hiện có, bao gồm không gian nhà cung cấp chỉ đọc đơn của mình.
-- Chưa thể kết luận Mobile app đã tích hợp hoàn chỉnh vì workspace không có source code Mobile.
-- Chưa xác nhận end-to-end với database/migration thật hoặc trình duyệt; kết luận hiện tại dựa trên review code, typecheck, unit/contract test và production build.
+FE Web và BE khớp các cấu hình cần thiết cho flow khách chốt ngày 08/10/2026. API có các nghiệp vụ tương ứng và test PostgreSQL cho quy tắc chính. Build thành công không chứng minh mobile, iPOS hoặc hạ tầng ảnh/push đã chạy end-to-end.
 
-## 2. Đối chiếu Web Admin ↔ Backend
+`new-flow.md` là mô tả ban đầu; [câu trả lời khách](customer-flow-questions-response.md) được ưu tiên: đóng thiếu 00:00, nhập tồn hàng thừa, NCC xem giá đơn của mình, ảnh riêng tư và Web chỉ cấu hình. Nội dung trả lời gốc được giữ nguyên.
 
-| Chức năng                     | Frontend                                    | Backend                                                                | Kết quả             |
-| ----------------------------- | ------------------------------------------- | ---------------------------------------------------------------------- | ------------------- |
-| Xem quyền theo nhóm           | `GET /group-eligibility`                    | Có route, permission `eligibility.read`, pagination và response schema | Khớp                |
-| Cấp/sửa quyền theo nhóm       | `POST /group-eligibility`                   | Upsert theo cơ sở + bộ phận + nhóm, permission `eligibility.manage`    | Khớp                |
-| Bật/tắt quyền theo nhóm       | Gửi `active`                                | Backend giữ nguyên hạn mức nếu payload không gửi lại                   | Khớp                |
-| Xem ngoại lệ mặt hàng         | `GET /item-eligibility`                     | Trả cấu hình trực tiếp theo mặt hàng                                   | Khớp                |
-| Mobile lấy danh sách hiệu lực | Tham số `effective=true` trong tài liệu     | Backend gộp quyền nhóm và ngoại lệ mặt hàng                            | Khớp                |
-| Nhà cung cấp ưu tiên          | `is_preferred` trong form và type           | `isPreferred`, tối đa một NCC ưu tiên đang hoạt động/mặt hàng          | Khớp                |
-| Số điện thoại NCC             | UI bắt buộc                                 | DTO tạo mới bắt buộc                                                   | Khớp                |
-| Tab và deep link              | `rules`, `group-eligibility`, `eligibility` | Không phụ thuộc backend                                                | Khớp quyền hiển thị |
+## Web Admin và Backend
 
-### Quy tắc quyền theo nhóm
+| Cấu hình            | Web                                             | Backend                                                               | Kết quả                                        |
+| ------------------- | ----------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------- |
+| Cơ cấu              | Cơ sở, kho, bộ phận                             | `/facilities`, `/stock-locations`, `/departments`                     | Khớp                                           |
+| Danh mục            | Nhóm, đơn vị, nguyên liệu, quy đổi              | Catalog/conversion kiểm tra tổ chức và hiệu lực                       | Khớp                                           |
+| NCC                 | Số điện thoại, hàng, giá, NCC ưu tiên           | `/suppliers`, `/supplier-ingredients`, một NCC ưu tiên hoạt động/hàng | Khớp                                           |
+| Hàng được xin       | Nhóm và ngoại lệ từng hàng                      | `/group-eligibility`, `/item-eligibility`, ngoại lệ ưu tiên           | Khớp                                           |
+| Nguồn cấp           | Kho hoặc NCC theo cơ sở/bộ phận/hàng            | `/source-rules`, bulk atomic, kiểm tra lại khi duyệt                  | Khớp                                           |
+| Tài khoản           | Loại, liên kết NCC, vai trò/phạm vi             | User/role/grant, chặn API nội bộ cho SUPPLIER                         | Khớp                                           |
+| Chính sách          | Giá chuẩn/ngưỡng, thanh toán hai người, lưu ảnh | `/price-rules`, `/workflow-policy`, quyền ADMIN riêng                 | Khớp                                           |
+| iPOS                | Mapping, định mức, cảnh báo                     | Mapping/recipe/alert rule, import thủ công trên API                   | Khớp cấu hình; chưa kết nối thật               |
+| Nhật ký/xóa         | Nhật ký, ngừng sử dụng, preview/mật khẩu xóa    | Audit và purge ADMIN                                                  | Khớp; xóa có thể liên quan nhiều cơ sở         |
+| Phân chia giao diện | Không menu xử lý nghiệp vụ, không tour          | API phân loại Mobile/Web                                              | Khớp; hướng dẫn đã đổi thành các bước cấu hình |
 
-1. Cấu hình trực tiếp theo nguyên liệu luôn ưu tiên cấu hình nhóm.
-2. Cấu hình trực tiếp `active=false` chặn riêng nguyên liệu dù nhóm đang được phép.
-3. Cấu hình trực tiếp có hạn mức `null` nghĩa là không giới hạn và không kế thừa hạn mức nhóm.
-4. Nhóm nguyên liệu ngừng hoạt động không còn cấp quyền hiệu lực khi tạo hoặc duyệt phiếu.
+## Nghiệp vụ và contract mobile
 
-## 3. Đối chiếu Mobile integration ↔ Backend
+| Quy tắc                         | Code chính                                | Bằng chứng kiểm thử                                         |
+| ------------------------------- | ----------------------------------------- | ----------------------------------------------------------- |
+| Từ chối tạo mới, hủy trước nhận | Request/Order/Transfer, `cancel-order.ts` | Phiếu từ chối bất biến; hủy sau xuất đảo transit            |
+| Lượng/giá dùng đơn vị cơ sở     | Request/Transfer, migration 003           | Xin 2 bao × 5 kg phát hành 10 kg, nhận/tiền đúng            |
+| Thiếu/thừa, giao bù, 1–10 ảnh   | Delivery/Attachment                       | Ảnh bắt buộc, thừa cộng tồn/tiền một lần, bù nhiều lần      |
+| 00:00 đóng thiếu, chặn nhận trễ | Delivery, WorkflowWorker                  | Chốt thiếu và retry theo giờ Việt Nam                       |
+| Tuyến và khoảng giờ điều chuyển | Transfer                                  | Tuyến cấm, Kho tổng ↔ Bếp tổng tự duyệt, start/end          |
+| Hoàn về nguồn gốc, cuối ngày    | Workflow service/worker                   | Hoàn một phần giảm hóa đơn một lần, lý do từ chối/thông báo |
+| Giá và thanh toán hai người     | Workflow/Reporting                        | Lưu giá, cảnh báo, người nhập không tự xác nhận, thông báo  |
+| Báo hỏng một lần, tồn âm        | Operation/Delivery                        | Submit giảm, confirm không trừ lại, xuất khi tồn âm         |
+| Kiểm kê mù, lịch sử lệch đỏ     | Operation, response visibility            | Redaction và audit `highlight=RED`                          |
+| Nhắc và thu hồi quyền           | Worker, Inventory/Push                    | UNREAD/READ, quyền bị thu hồi, lọc push                     |
+| NCC chỉ đọc đơn/giá của mình    | Supplier projection/PermissionGuard       | Schema/phạm vi, chặn nội bộ dù cấp nhầm quyền               |
+| Hủy dữ liệu bán hàng            | Ipos                                      | Audit/thông báo, giữ dữ liệu gốc, tính lại tiêu hao         |
+| Xóa ADMIN                       | Purge                                     | Mật khẩu, preview thay đổi và các loại gốc xóa              |
 
-### Đã khớp
+[mobile-integration.md](mobile-integration.md) mô tả payload, trạng thái và giới hạn thực tế. Ảnh dùng Bearer token; giá bị ẩn không coi là 0; thanh toán lấy version riêng. Hoàn APPROVED chưa có `postedAt` vẫn chờ hạch toán.
 
-- Đăng nhập, refresh token, hồ sơ, permission và scope.
-- Xin hàng, sửa draft, gửi duyệt, revise và cancel.
-- Xuất hàng, nhận hàng, idempotency và version conflict.
-- Phiếu nhận bắt buộc có ít nhất một attachment `RECEIPT` ở trạng thái `READY` trước khi post.
-- Điều chuyển Kho tổng ↔ Bếp tổng tự duyệt; tuyến khác chờ duyệt.
-- Kiểm kê, báo hỏng, notification inbox và FCM.
-- Nhà cung cấp dùng chung cơ chế đăng nhập; endpoint `/supplier/orders` tự giới hạn theo `supplier_id`.
-- Projection nhà cung cấp không trả đơn giá, tồn kho hoặc công nợ khi quyền xem giá chưa được chốt.
-- Push của nhà cung cấp dùng route `/supplier/orders/{id}`.
+## Điểm sửa trong lần review
 
-### Sai lệch tài liệu đã sửa trong lần review
+1. Viết lại README Web từ template và rút gọn README Backend: flow, setup, bootstrap, test và deploy.
+2. Thay hướng dẫn xử lý nghiệp vụ cuối ngày trên Web bằng sáu bước cấu hình, link đúng tab theo quyền và checklist mobile.
+3. Bỏ yêu cầu `R2_PUBLIC_BASE_URL` trong Compose/env mẫu; sửa hướng dẫn VPS sang R2 private.
+4. Đổi nhãn `/audit-events` sang BOTH để Chủ xem lịch sử mobile; giữ quyền `audit.read` cấp tổ chức và bổ sung contract.
+5. CI bổ sung PostgreSQL 17, `TEST_DATABASE_URL` và migrate database test, tránh bỏ qua test flow.
+6. Cập nhật tài liệu quyết định/review cũ và thêm ghi chú ưu tiên nguồn đã chốt ở `new-flow.md`.
+7. Cảnh báo giá gắn đơn từng chỉ kiểm tra `order.read`, nên còn lộ nội dung giá sau khi thu hồi `price_alert.read`. Thêm `requiredPermission` (migration 005), kiểm tra quyền đúng scope trên inbox/detail/read/push và test người mất quyền hoặc chỉ có quyền ở cơ sở khác.
 
-1. Đổi nguồn tham chiếu từ `Untitled.fig` sang `new-flow.md`.
-2. Sửa payload hủy yêu cầu từ trường không tồn tại `reason` sang `note`.
-3. Sửa mô tả báo hỏng: xác nhận hiện chưa ghi giảm tồn và policy production vẫn bị chặn.
-4. Bổ sung sự kiện push đơn mới cho nhà cung cấp.
-5. Ghi rõ tài liệu Mobile là contract bàn giao, chưa phải bằng chứng app đã được triển khai.
+## Chưa xác nhận hoàn thành
 
-## 4. Lỗi code phát hiện và đã xử lý
+- Chưa có source mobile: màn hình, camera, offline/retry và alarm native cần triển khai/kiểm thử trên thiết bị.
+- R2/FCM thật cần smoke test. Code không tự tắt domain/bucket public đã mở trên Cloudflare.
+- iPOS còn chờ giao thức/môi trường thử. Hủy hiện áp dụng từng bản ghi import; chưa mapping đầy đủ một hóa đơn. Hoàn món/combo ngoài phạm vi hiện tại.
+- Phương án gửi phiếu dạng hóa đơn/PDF/ảnh cho NCC ngoài app chưa có endpoint PDF hoặc mẫu xác nhận. JSON/CSV không được coi là hoàn thành yêu cầu này.
+- Rule tồn/hao hụt mới đang `testOnly=true`, `active=false`; chưa có job đánh giá và gửi cảnh báo vận hành theo rule. Cảnh báo lệch kiểm kê và cảnh báo giá đã có là chức năng riêng.
+- Cần vận hành thống nhất các cách hiểu đã triển khai: người nội bộ được quyền nhập giá; người có quyền sửa bản nháp; hoàn chốt cuối ngày duyệt; Chủ là tài khoản nội bộ có quyền phù hợp, không có role OWNER riêng mặc định.
 
-| Mức độ     | Phát hiện                                                                               | Xử lý                                                                |
-| ---------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Cao        | Từ chối yêu cầu từng ghi request ID của HTTP request thay vì ID phiếu nghiệp vụ         | Dùng đúng ID phiếu trong approval event và thêm test hồi quy         |
-| Cao        | Projection nhà cung cấp trả `unitPriceSnapshot` dù quyền xem giá chưa được chốt         | Loại đơn giá khỏi runtime projection và OpenAPI; thêm contract test  |
-| Cao        | Nhóm đã ngừng hoạt động vẫn có thể được dùng khi kiểm tra quyền tạo/duyệt phiếu         | Bắt buộc nhóm active trong cấu hình và revalidation                  |
-| Cao        | Duyệt phiếu chưa kiểm tra lại toàn bộ trạng thái nguồn, kho nhận và hạn mức đã thay đổi | Revalidate dữ liệu hiện hành ngay trong transaction duyệt            |
-| Trung bình | Ngoại lệ trực tiếp “không giới hạn” bị response hiệu lực hiển thị nhầm hạn mức của nhóm | Giữ đúng `null` của cấu hình trực tiếp; thêm test hồi quy            |
-| Trung bình | UI có thể chọn NCC ưu tiên cho liên kết đang ngừng hoạt động                            | Khóa switch và backend tiếp tục kiểm tra                             |
-| Trung bình | Backend hỗ trợ sửa hạn mức nhóm nhưng UI không có thao tác sửa rõ ràng                  | Bổ sung nút sửa và form cập nhật                                     |
-| Trung bình | Thêm nhiều mặt hàng được xin từng gọi API riêng, có thể lưu dở dang                     | Dùng endpoint bulk atomic, tối đa 500 cấu hình/lần                   |
-| Trung bình | Import nguồn kho chỉ dùng mã kho nên mơ hồ khi nhiều cơ sở trùng mã                     | Hỗ trợ mã cơ sở nguồn và báo lỗi khi mã kho không duy nhất           |
-| Thấp       | Tab không có quyền vẫn xuất hiện rồi tự chuyển sau render                               | Lọc tab trước render và chỉ đổi tab khi người dùng/deep link yêu cầu |
+## Kiểm chứng
 
-## 5. Rủi ro và việc còn lại
+Kết quả kiểm tra ngày 09/10/2026:
 
-### Cần thực hiện trước khi triển khai production
+- Backend: typecheck, build, format đạt; 76/76 test đạt trên PostgreSQL riêng đã migrate, không bỏ qua test.
+- Web: lint, typecheck và build đạt; kiểm tra giao diện hướng dẫn trên trình duyệt desktop và đối chiếu 19 link đúng route/tab.
+- OpenAPI `/audit-events` có audience BOTH; API chấp nhận bộ lọc lịch sử được mô tả trong tài liệu mobile.
+- `npm audit --omit=dev --audit-level=high` không phát hiện lỗ hổng ở cả hai repo.
 
-1. Chạy migration trên môi trường thử nghiệm và kiểm tra dữ liệu thật.
-2. Chạy smoke test có PostgreSQL cho tạo yêu cầu theo nhóm, duyệt phiếu, đổi NCC ưu tiên và post receipt có/không có ảnh.
-3. Có source Mobile để kiểm tra login theo `kind=SUPPLIER`, deep link, upload ảnh và retry idempotency thực tế.
-4. Chốt các câu hỏi nghiệp vụ trong `docs/customer-flow-questions.md`.
+Chưa kiểm thử giao diện trên thiết bị mobile. Khi release cần kiểm tra thêm màn hình nhỏ và checklist tích hợp trên thiết bị thật.
 
-### Nợ kỹ thuật không chặn build
-
-- Web ESLint đạt với 0 error và 0 warning; chưa có bộ component test để chống hồi quy UI.
-- Ảnh R2 hiện dùng URL public không hết hạn; thu hồi quyền trong DICA không thu hồi được URL đã biết.
-- Chưa có browser/component test tự động cho trạng thái mở/đóng sidebar và chuyển tab con.
-- Chưa có integration test chạy migration và unique partial index bằng PostgreSQL thật.
-
-## 6. Kết quả kiểm tra
-
-- Backend typecheck: đạt.
-- Backend test: đạt 55/55, gồm contract OpenAPI, bulk eligibility, hạn mức nhóm, reject event và revalidation nguồn cấp.
-- Web typecheck: đạt.
-- Web ESLint: đạt, 0 error và 0 warning.
-- Web production build với Next.js 16.4.0: đạt.
-- `npm audit --omit=dev --audit-level=high`: không có vulnerability ở Backend và Web tại thời điểm review.
+CI được kiểm tra từ cấu hình và chạy local tương đương; chưa chạy workflow GitHub hoặc deploy production trong lần review này. Release cần migrate, bootstrap quyền v4 và checklist trong tài liệu mobile.

@@ -1,21 +1,38 @@
-# Quyết định kỹ thuật và điểm OPEN
+# Quyết định và phần còn chờ
 
-Backlog nghiệp vụ và danh sách câu hỏi khách được quản lý tại `TASK.md`; file này chỉ giữ quyết định kỹ thuật/policy cần truy vết.
+Cập nhật: 09/10/2026. [Câu trả lời khách ngày 08/10/2026](customer-flow-questions-response.md) là nguồn nghiệp vụ hiện hành, ưu tiên hơn `new-flow.md` và `flow.md`. [TASK.md](../TASK.md) theo dõi tiến độ hiện tại.
 
-| ID      | Trạng thái | Xử lý hiện tại                                                                                                         | Điều kiện production                                                                  |
-| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| ADR-01  | PROPOSED   | Modular monolith NestJS/PostgreSQL/Prisma                                                                              | Đánh giá lại sau khi có OPEN-09                                                       |
-| ADR-02  | PROPOSED   | Lượng 3 số lẻ, giá 4, hệ số 6; không dùng float                                                                        | Chủ dự án xác nhận precision/làm tròn                                                 |
-| ADR-03  | PROPOSED   | Bearer JWT + session DB; kiểm tra grant mỗi request                                                                    | Xác nhận TTL/CORS/secret store                                                        |
-| ADR-04  | CONFIRMED  | R2 public read; client upload bằng presigned PUT, API trả public asset URL cố định                                     | User đổi quyết định 2026-10-07; chấp nhận URL có thể được chia sẻ và không tự hết hạn |
-| OPEN-01 | OPEN       | Lượng nhận thừa được giữ trong discrepancy nhưng không tự nhập; adjustment post chặn tồn âm; báo hỏng không tự trừ tồn | Chốt thời điểm tồn, tồn âm, thừa/hỏng/hoàn                                            |
-| OPEN-02 | OPEN       | Chưa mở đổi nguồn đơn đang thực hiện                                                                                   | Chốt actor và trạng thái được đổi                                                     |
-| OPEN-03 | OPEN       | Chỉ bật resolve/close/confirm và approve/post adjustment khi `DEMO_POLICY_ENABLED=true`; production mặc định chặn      | Chốt quyền và nguyên tắc tách người lập/duyệt                                         |
-| OPEN-04 | OPEN       | Demo kho riêng Bếp/Bàn                                                                                                 | Chốt kho chung, cutoff và reopen                                                      |
-| OPEN-05 | OPEN       | Có adapter import thủ công, staging/validate/preview/commit, mapping và chống trùng; chưa gọi API iPOS thật            | Cung cấp API/file iPOS và mapping thật                                                |
-| OPEN-06 | OPEN       | Chưa bật cảnh báo vận hành                                                                                             | Chốt ngưỡng/đơn vị/lịch nhắc                                                          |
-| OPEN-07 | OPEN       | Web đang xuất CSV đơn NCC ở phía client                                                                                | Chốt mẫu PDF/ảnh, giá và actor payment                                                |
-| OPEN-08 | OPEN       | Attachment API đã có cho receipt/báo hỏng; R2 public read, ảnh tối đa 5 MB, JPEG/PNG/WEBP/HEIC/HEIF                    | Chỉ còn chốt trường hợp nghiệp vụ bắt buộc ảnh                                        |
-| OPEN-09 | OPEN       | Pool mặc định tối đa 20; chưa cam kết SLA                                                                              | Cung cấp tải, hạ tầng, RPO/RTO/retention                                              |
+## Quyết định đang áp dụng
 
-Khi một quyết định được xác nhận, bổ sung người xác nhận, ngày, ảnh hưởng schema/API/test vào bảng này.
+| Nội dung                       | Cách áp dụng                                                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Giao diện                      | Mobile xử lý nghiệp vụ; Web cấu hình. NCC dùng chung mobile, chỉ đọc đơn/giá của mình.                                                              |
+| Phiếu bị từ chối/đổi sau duyệt | Tạo mới; hủy chỉ trước nhận đã ghi sổ và cần đúng quyền.                                                                                            |
+| Thiếu/thừa                     | Bù nhiều lần trong ngày, 00:00 đóng phần thiếu; thừa nhập tồn.                                                                                      |
+| Điều chuyển                    | Kho tổng ↔ Bếp tổng tự duyệt và thông báo; Chi nhánh ↔ Chi nhánh, Bếp tổng ↔ Chi nhánh cần duyệt. Không điều chuyển trực tiếp Chi nhánh ↔ Kho tổng. |
+| Hoàn                           | Về nguồn đã cấp, hoàn một phần, ảnh hàng cùng hóa đơn; quản lý/Chủ duyệt, chốt cuối ngày duyệt.                                                     |
+| Kiểm kê/báo hỏng               | Nhân viên nhập số thực tế, quyền riêng xem lệch/điều chỉnh. Báo hỏng có ảnh giảm tồn một lần khi gửi. Tồn vật lý có thể âm.                         |
+| Giá/tiền                       | Lưu giá NCC/hàng; ADMIN đặt giá chuẩn/ngưỡng; tùy chọn xác nhận hai người; tiền theo lượng thực giữ lại.                                            |
+| Ảnh                            | R2 riêng tư, upload presigned, đọc qua API có quyền; 1–10 ảnh mỗi lần nhận, lưu 6–12 tháng. Quyết định public ngày 07/10 đã bị thay thế.            |
+| Thông báo                      | Inbox/push theo quyền tài nguyên; nhắc mỗi giờ đến khi đọc, không giờ im lặng. Alarm native cần app thực hiện.                                      |
+| Xóa                            | ADMIN xem phạm vi và nhập mật khẩu; xóa lịch sử liên quan. Ngừng sử dụng giữ lịch sử.                                                               |
+
+## Lựa chọn kỹ thuật hiện tại
+
+- NestJS modular monolith, PostgreSQL/Prisma; bút toán có transaction/idempotency.
+- Bearer JWT + session, kiểm tra quyền/scope mỗi request.
+- Lượng 3 số lẻ, giá 4, hệ số quy đổi 6; dùng Decimal.
+- Pool mặc định 20 connection; chưa cam kết tải/SLA/RPO/RTO.
+- `audit.read` hiện cần grant cấp tổ chức; chưa có audit chung theo scope cơ sở cho mọi resource.
+
+## Còn chờ
+
+| Nội dung             | Cần có                                                                                        |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| Mobile               | Source app, test camera/offline/retry và alarm Android/iOS.                                   |
+| iPOS                 | API/webhook/file, môi trường thử, mapping hóa đơn hủy. Hoàn món/combo ngoài phạm vi hiện tại. |
+| Phiếu NCC ngoài app  | Mẫu hóa đơn/PDF/ảnh và triển khai xuất phiếu; chưa có endpoint PDF.                           |
+| Cảnh báo tồn/hao hụt | Rule mới chỉ là thử nghiệm, chưa có job gửi cảnh báo vận hành; cần chốt ngưỡng/lịch/cooldown. |
+| Hạ tầng              | Smoke test R2 private/FCM, giám sát worker, backup/phục hồi theo yêu cầu vận hành.            |
+
+Xem [review hiện hành](new-flow-implementation-review.md) và [contract mobile](mobile-integration.md) để phân biệt code/test với phần chưa kiểm thử dịch vụ thật.

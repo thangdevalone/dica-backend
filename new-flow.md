@@ -1,5 +1,7 @@
 # FLOW NGHIỆP VỤ — APP KHO / NHÀ CUNG CẤP VÀ WEB ADMIN
 
+> Tài liệu này là mô tả ban đầu. Các điểm đã được khách chốt ngày 08/10/2026 nằm trong [customer-flow-questions-response.md](docs/customer-flow-questions-response.md) và được ưu tiên khi có khác biệt. Ví dụ: phần thiếu bị đóng lúc 00:00, hàng thừa được nhập tồn, nhà cung cấp được xem giá đơn của mình và ảnh phải riêng tư. Xem [kết quả review hiện hành](docs/new-flow-implementation-review.md) và [contract mobile](docs/mobile-integration.md) trước khi triển khai.
+
 ## 1. Phạm vi và căn cứ
 
 ### 1.1. Hai giao diện
@@ -40,17 +42,17 @@ iPOS chỉ được dùng làm nguồn dữ liệu đối soát kiểm kê.
 
 ## 2. Vai trò và trách nhiệm
 
-| Role | Giao diện | Trách nhiệm | Giới hạn/quyền |
-| --- | --- | --- | --- |
-| Admin | Web Admin | Cấu hình tổ chức, tài khoản, quyền và danh mục | Toàn quyền cấu hình theo sơ đồ |
-| Chủ | App chung | Có toàn quyền theo mô tả; xem báo cáo/lịch sử và nhận thông báo | Phạm vi toàn hệ thống; cách thể hiện cụ thể cần cấu hình |
-| Quản lý tổng | App chung | Duyệt yêu cầu, gọi hàng khi có quyền, theo dõi lịch sử, nhận báo cáo và xử lý sai lệch | Theo quyền được gán; không đồng nghĩa mặc định có mọi quyền cấu hình |
-| Bếp trưởng/phó | App chung | Gọi nguyên liệu được phép, nhận/kiểm hàng, kiểm kê cuối ngày, báo hỏng | Theo cơ sở và nhóm hàng được cấp, ví dụ thịt/rau |
-| Bộ phận Bàn / Quản lý, giám sát cơ sở | App chung | Gọi nhóm hàng được phép, nhận/kiểm hàng, kiểm kê và báo hỏng | Theo cơ sở và nhóm hàng được cấp, ví dụ bia/nước ngọt/rượu |
-| Kho tổng/Kiểm kho | App chung | Gọi hàng, nhập kho, xuất cho cơ sở, kiểm kê; nhận/xuất với Bếp tổng | Theo quyền và danh mục được cấp |
-| Bếp tổng | App chung, chức năng theo quyền cần chốt | Là đầu nhận/giao hàng với Kho tổng | Sơ đồ xác định nghiệp vụ, chưa xác định đầy đủ quyền thao tác của tài khoản Bếp tổng |
-| Nhà cung cấp | App chung | Cung cấp/giao hàng theo yêu cầu đã được duyệt; giao bù khi thiếu | Chi tiết quyền và thao tác trong app chưa được sơ đồ xác định |
-| Người được cấp quyền bổ sung | Giao diện tương ứng | Xem báo cáo, nhận thông báo hoặc thực hiện nghiệp vụ được gán | Không mặc định có toàn quyền |
+| Role                                  | Giao diện                                | Trách nhiệm                                                                            | Giới hạn/quyền                                                                       |
+| ------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Admin                                 | Web Admin                                | Cấu hình tổ chức, tài khoản, quyền và danh mục                                         | Toàn quyền cấu hình theo sơ đồ                                                       |
+| Chủ                                   | App chung                                | Có toàn quyền theo mô tả; xem báo cáo/lịch sử và nhận thông báo                        | Phạm vi toàn hệ thống; cách thể hiện cụ thể cần cấu hình                             |
+| Quản lý tổng                          | App chung                                | Duyệt yêu cầu, gọi hàng khi có quyền, theo dõi lịch sử, nhận báo cáo và xử lý sai lệch | Theo quyền được gán; không đồng nghĩa mặc định có mọi quyền cấu hình                 |
+| Bếp trưởng/phó                        | App chung                                | Gọi nguyên liệu được phép, nhận/kiểm hàng, kiểm kê cuối ngày, báo hỏng                 | Theo cơ sở và nhóm hàng được cấp, ví dụ thịt/rau                                     |
+| Bộ phận Bàn / Quản lý, giám sát cơ sở | App chung                                | Gọi nhóm hàng được phép, nhận/kiểm hàng, kiểm kê và báo hỏng                           | Theo cơ sở và nhóm hàng được cấp, ví dụ bia/nước ngọt/rượu                           |
+| Kho tổng/Kiểm kho                     | App chung                                | Gọi hàng, nhập kho, xuất cho cơ sở, kiểm kê; nhận/xuất với Bếp tổng                    | Theo quyền và danh mục được cấp                                                      |
+| Bếp tổng                              | App chung, chức năng theo quyền cần chốt | Là đầu nhận/giao hàng với Kho tổng                                                     | Sơ đồ xác định nghiệp vụ, chưa xác định đầy đủ quyền thao tác của tài khoản Bếp tổng |
+| Nhà cung cấp                          | App chung                                | Cung cấp/giao hàng theo yêu cầu đã được duyệt; giao bù khi thiếu                       | Chi tiết quyền và thao tác trong app chưa được sơ đồ xác định                        |
+| Người được cấp quyền bổ sung          | Giao diện tương ứng                      | Xem báo cáo, nhận thông báo hoặc thực hiện nghiệp vụ được gán                          | Không mặc định có toàn quyền                                                         |
 
 ### Nguyên tắc phân quyền
 
@@ -80,10 +82,12 @@ Admin tạo/cập nhật chi nhánh và kho tổng
 ```
 
 Kết quả:
+
 - App hiển thị nghiệp vụ và dữ liệu theo cấu hình.
 - Admin có thể thêm/sửa/xóa chi nhánh và kho tổng.
 
 Với tài khoản nhà cung cấp:
+
 - Cần cấu hình liên kết tài khoản với nhà cung cấp tương ứng.
 - Đây là chi tiết bổ sung để triển khai app chung, cần chốt.
 - Đề xuất chỉ cho nhà cung cấp xem đơn/dữ liệu liên quan đến mình;
@@ -105,6 +109,7 @@ Tạo nhóm nguyên liệu/hàng hóa
 ```
 
 Yêu cầu:
+
 - Đơn vị quy đổi phục vụ nhập và kiểm kê, ví dụ thùng bia → lon.
 - Nhà cung cấp có tên và số điện thoại.
 - Nguyên liệu có thể dùng chung hoặc phân theo cơ sở.
@@ -158,6 +163,7 @@ Bếp/Bàn chọn hàng trong phạm vi quyền
 ### 6.1. Nhà cung cấp dùng app chung
 
 Trách nhiệm theo nghiệp vụ:
+
 - Quản lý tổng: duyệt và chuyển yêu cầu cho nhà cung cấp.
 - Nhà cung cấp: cung cấp/giao hàng, giao bù khi thiếu.
 - Bên nhận: xác nhận lượng thực nhận.
@@ -175,6 +181,7 @@ Quản lý tổng duyệt phiếu
 ```
 
 Chưa coi các thao tác sau là yêu cầu đã chốt:
+
 - Nhà cung cấp bấm nhận/từ chối đơn.
 - Cập nhật đang chuẩn bị/đang giao.
 - Nhập số lượng giao hoặc đính kèm chứng từ.
@@ -244,6 +251,7 @@ Người nhận kiểm hàng
 ```
 
 Chưa xác định:
+
 - Cách xử lý hàng thừa: giữ, trả hay điều chỉnh phiếu.
 - Cách đóng trường hợp không thể giao bù.
 - Cách ghi nhận giao bù nhiều lần.
@@ -263,11 +271,13 @@ Người có quyền lập phiếu nhập
 ```
 
 Nguyên tắc bắt buộc:
+
 - Dữ liệu thanh toán phải phù hợp với lượng thực nhận.
 - Không mặc định lượng yêu cầu là lượng đã nhận.
 - Không đồng nghĩa xác nhận đủ hàng với đã thanh toán.
 
 Cần chốt:
+
 - Ai được cập nhật trạng thái thanh toán.
 - Ai được xem giá/tiền.
 - Bộ trạng thái và xử lý công nợ.
@@ -343,19 +353,21 @@ Bếp/Bàn báo số lượng còn lại cuối ngày
 ```
 
 Cần chốt:
+
 - Cách tích hợp iPOS.
 - Nguồn định mức và người được cấu hình định mức.
 - Cách xử lý khi thiếu dữ liệu đối soát.
 
 ## 13. Hoàn hàng, hao hụt, báo hỏng
 
-| Nghiệp vụ | Ai thực hiện | Ai xem/nhận báo cáo | Mức độ xác định |
-| --- | --- | --- | --- |
-| Hoàn hàng | Có trên app người dùng; role cụ thể cần chốt | Cần chốt | Chưa có luồng chi tiết |
-| Hao hụt | Người ghi nhận/tính hao hụt chưa được chỉ rõ | Quản lý tổng, quyền cao hơn hoặc người được Admin cấp quyền | Đã xác định quyền xem |
-| Báo hỏng | Bếp/Bàn gửi báo cáo | Người có quyền xem/nhận thông báo | Đã xác định bên báo và bên xem |
+| Nghiệp vụ | Ai thực hiện                                 | Ai xem/nhận báo cáo                                         | Mức độ xác định                |
+| --------- | -------------------------------------------- | ----------------------------------------------------------- | ------------------------------ |
+| Hoàn hàng | Có trên app người dùng; role cụ thể cần chốt | Cần chốt                                                    | Chưa có luồng chi tiết         |
+| Hao hụt   | Người ghi nhận/tính hao hụt chưa được chỉ rõ | Quản lý tổng, quyền cao hơn hoặc người được Admin cấp quyền | Đã xác định quyền xem          |
+| Báo hỏng  | Bếp/Bàn gửi báo cáo                          | Người có quyền xem/nhận thông báo                           | Đã xác định bên báo và bên xem |
 
 Không tự mặc định:
+
 - Báo hỏng phải qua duyệt.
 - Báo hỏng tự trừ tồn.
 - Hoàn hàng tự điều chỉnh thanh toán.
@@ -366,6 +378,7 @@ Các quy tắc này cần được thống nhất.
 ## 14. Lịch sử và thông báo
 
 Trách nhiệm của hệ thống:
+
 - Lưu dữ liệu nghiệp vụ về Server/Cloud DB.
 - Lưu lịch sử phục vụ đối soát lâu dài.
 - Ghi ngày giờ thao tác.
@@ -380,6 +393,7 @@ Người dùng thực hiện nghiệp vụ
 ```
 
 Nguyên tắc:
+
 - Có quyền xem không mặc định có quyền sửa hoặc duyệt.
 - Nhận thông báo không mặc định có quyền xử lý.
 - Kho tổng ↔ Bếp tổng vẫn lưu lịch sử và thông báo dù miễn duyệt.
@@ -418,6 +432,7 @@ CHỦ/NGƯỜI ĐƯỢC CẤP QUYỀN
 ```
 
 Ngoại lệ:
+
 - Nhận/xuất Kho tổng ↔ Bếp tổng không cần duyệt.
 
 ## 16. Các điểm phải chốt để hoàn thiện đặc tả

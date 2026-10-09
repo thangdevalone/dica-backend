@@ -61,6 +61,9 @@ export async function notifyPermission(
         message,
         resourceType,
         resourceId,
+        ...(permission === "price_alert.read"
+          ? { requiredPermission: permission }
+          : {}),
         // The worker sends the initial push on its next pass.
         lastRemindedAt: new Date(0),
       },

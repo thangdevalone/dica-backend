@@ -724,6 +724,64 @@ test(
           }),
           1,
         );
+        const priceAlert = await db.notification.findFirstOrThrow({
+          where: {
+            resourceId: o.id,
+            title: "Đơn giá vượt ngưỡng",
+            userId: user.id,
+          },
+        });
+        assert.equal(priceAlert.requiredPermission, "price_alert.read");
+        const lostPriceAlert = {
+          ...user,
+          grants: user.grants.map((grant) => ({
+            ...grant,
+            permissions: grant.permissions.filter(
+              (permission) => permission !== "price_alert.read",
+            ),
+          })),
+        };
+        const foreignPriceAlertScope = {
+          ...lostPriceAlert,
+          grants: [
+            ...lostPriceAlert.grants,
+            {
+              id: randomUUID(),
+              roleCode: "PRICE_ALERT",
+              scopeType: "FACILITY" as const,
+              facilityId: randomUUID(),
+              stockLocationId: null,
+              departmentId: null,
+              permissions: ["price_alert.read"],
+            },
+          ],
+        };
+        for (const restricted of [lostPriceAlert, foreignPriceAlertScope]) {
+          const inbox = await inventory.notifications(
+            restricted,
+            new NotificationListQueryDto(),
+          );
+          assert.equal(
+            inbox.data.some((row) => row.id === priceAlert.id),
+            false,
+          );
+          await assert.rejects(() =>
+            inventory.notification(restricted, priceAlert.id),
+          );
+          await assert.rejects(() =>
+            inventory.markNotificationRead(restricted, priceAlert.id),
+          );
+          assert.deepEqual(
+            await inventory.readableNotificationIds(restricted, [
+              priceAlert.id,
+            ]),
+            [],
+          );
+        }
+        assert.deepEqual(
+          await inventory.readableNotificationIds(user, [priceAlert.id]),
+          [priceAlert.id],
+        );
         assert.equal(
           (
             await db.supplierIngredient.findFirstOrThrow({
