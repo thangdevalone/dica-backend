@@ -6,6 +6,7 @@ import type { AuthUser } from "./auth.types.js";
 import { AuthService } from "./auth.service.js";
 import { CurrentUser } from "./decorators/current-user.decorator.js";
 import { Public } from "./decorators/public.decorator.js";
+import { Authenticated } from "./decorators/authenticated.decorator.js";
 import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import { LoginDto, RefreshTokenDto } from "./dto/login.dto.js";
 import {
@@ -43,6 +44,7 @@ export class AuthController {
     emptyBody: true,
   })
   @Post("auth/logout")
+  @Authenticated()
   logout(@CurrentUser() u: AuthUser) {
     return this.auth.logout(u);
   }
@@ -51,6 +53,7 @@ export class AuthController {
     audience: "both",
   })
   @Get("me")
+  @Authenticated()
   me(@CurrentUser() u: AuthUser) {
     return this.auth.me(u);
   }
@@ -59,6 +62,7 @@ export class AuthController {
     audience: "both",
   })
   @Patch("me/profile")
+  @Authenticated()
   updateProfile(@CurrentUser() u: AuthUser, @Body() d: UpdateProfileDto) {
     return this.auth.updateProfile(u, d);
   }
@@ -66,6 +70,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiEndpoint("Đổi tên đăng nhập của tài khoản", { audience: "both" })
   @Patch("me/account")
+  @Authenticated()
   changeUsername(@CurrentUser() u: AuthUser, @Body() d: ChangeUsernameDto) {
     return this.auth.changeUsername(u, d);
   }
@@ -73,6 +78,7 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @ApiEndpoint("Đổi mật khẩu của tài khoản", { audience: "both" })
   @Post("me/change-password")
+  @Authenticated()
   changePassword(@CurrentUser() u: AuthUser, @Body() d: ChangePasswordDto) {
     return this.auth.changePassword(u, d);
   }
@@ -81,6 +87,7 @@ export class AuthController {
     audience: "both",
   })
   @Get("me/permissions")
+  @Authenticated()
   permissions(@CurrentUser() u: AuthUser) {
     return this.auth.permissions(u);
   }

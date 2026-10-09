@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from "@nestjs/common";
 import * as argon2 from "argon2";
 import type { AuthUser } from "../auth/auth.types.js";
+import { SYSTEM_ROLE_PERMISSIONS } from "../auth/access-control.catalog.js";
 import { ScopeService } from "../auth/scope.service.js";
 import type { PaginationDto } from "../common/dto/pagination.dto.js";
 import { ApiException } from "../common/errors/api.exception.js";
@@ -14,6 +15,7 @@ import {
 } from "../common/pagination/pagination.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { ScopeType, UserKind } from "../generated/prisma/client.js";
+import type { Prisma } from "../generated/prisma/client.js";
 import type {
   AssignGrantDto,
   CreateRoleDto,
@@ -32,6 +34,8 @@ const ADMIN_OWNER_REQUIRED_PERMISSIONS = [
   "grant.assign",
   "grant.revoke",
 ] as const;
+
+type ManagedRole = { code: string; permissions: { permissionCode: string }[] };
 
 @Injectable()
 export class UserService {
@@ -77,7 +81,10 @@ export class UserService {
             active: true,
             lastLoginAt: true,
             createdAt: true,
-            grants: { where: { revokedAt: null }, include: { role: true } },
+            grants: {
+              where: { revokedAt: null },
+              include: { role: { include: { permissions: true } } },
+            },
           },
           orderBy: [{ [sort.field]: sort.direction }, { id: sort.direction }],
           ...(skip !== undefined ? { skip } : {}),
@@ -117,8 +124,12 @@ export class UserService {
         organizationId: actor.organizationId,
         active: true,
       },
+      include: { permissions: true },
     });
     if (!role) this.notFound();
+    this.assertManageRole(actor, role);
+    if (role.code === "ADMIN_OWNER" && d.scope_type !== ScopeType.ORGANIZATION)
+      this.invalid("ADMIN chỉ được cấp ở phạm vi tổ chức.");
     if (
       d.kind === UserKind.SUPPLIER &&
       (role.code !== "SUPPLIER" || d.scope_type !== ScopeType.SUPPLIER)
@@ -143,6 +154,17 @@ export class UserService {
       this.invalid("Tên đăng nhập đã được sử dụng.");
     const passwordHash = await argon2.hash(d.password);
     const data = await this.db.$transaction(async (tx) => {
+      await this.lockOrganization(tx, actor.organizationId);
+      const currentRole = await tx.role.findFirst({
+        where: {
+          id: d.role_id,
+          organizationId: actor.organizationId,
+          active: true,
+        },
+        include: { permissions: true },
+      });
+      if (!currentRole) this.notFound();
+      this.assertManageRole(actor, currentRole);
       const user = await tx.user.create({
         data: {
           organizationId: actor.organizationId,
@@ -182,11 +204,10 @@ export class UserService {
     this.scope.assertAccess(actor, "user.deactivate", {});
     if (actor.id === id)
       this.invalid("Không thể tự vô hiệu hóa tài khoản đang đăng nhập.");
-    const target = await this.db.user.findFirst({
-      where: { id, organizationId: actor.organizationId },
-    });
-    if (!target) this.notFound();
     const data = await this.db.$transaction(async (tx) => {
+      await this.lockOrganization(tx, actor.organizationId);
+      await this.assertManageUser(actor, id, tx);
+      await this.assertRemainingAdmin(tx, actor.organizationId, { userId: id });
       const updated = await tx.user.update({
         where: { id },
         data: { active: false, tokenVersion: { increment: 1 } },
@@ -216,10 +237,7 @@ export class UserService {
   }
   async update(actor: AuthUser, id: string, d: UpdateUserDto) {
     this.scope.assertAccess(actor, "user.update", {});
-    const target = await this.db.user.findFirst({
-      where: { id, organizationId: actor.organizationId },
-    });
-    if (!target) this.notFound();
+    await this.assertManageUser(actor, id);
     const data = await this.db.user.update({
       where: { id },
       data: {
@@ -242,10 +260,7 @@ export class UserService {
   }
   async activate(actor: AuthUser, id: string) {
     this.scope.assertAccess(actor, "user.update", {});
-    const target = await this.db.user.findFirst({
-      where: { id, organizationId: actor.organizationId },
-    });
-    if (!target) this.notFound();
+    const target = await this.assertManageUser(actor, id);
     if (target.active) this.invalid("Tài khoản đang hoạt động.");
     const data = await this.db.$transaction(async (tx) => {
       const updated = await tx.user.update({
@@ -270,12 +285,11 @@ export class UserService {
   }
   async resetPassword(actor: AuthUser, id: string, d: ResetPasswordDto) {
     this.scope.assertAccess(actor, "user.reset_password", {});
-    const target = await this.db.user.findFirst({
-      where: { id, organizationId: actor.organizationId },
-    });
-    if (!target) this.notFound();
+    await this.assertManageUser(actor, id);
     const passwordHash = await argon2.hash(d.password);
     const data = await this.db.$transaction(async (tx) => {
+      await this.lockOrganization(tx, actor.organizationId);
+      await this.assertManageUser(actor, id, tx);
       await tx.user.update({
         where: { id },
         data: { passwordHash, tokenVersion: { increment: 1 } },
@@ -335,6 +349,8 @@ export class UserService {
   async createRole(actor: AuthUser, d: CreateRoleDto) {
     this.scope.assertAccess(actor, "role.manage", {});
     const code = d.code.trim().toUpperCase();
+    if (Object.hasOwn(SYSTEM_ROLE_PERMISSIONS, code))
+      this.invalid("Mã vai trò này dành riêng cho vai trò hệ thống.");
     const name = d.name.trim();
     const permissionCodes = [...new Set(d.permission_codes)];
     await this.validatePermissionCodes(actor, permissionCodes);
@@ -380,6 +396,7 @@ export class UserService {
       include: { permissions: true },
     });
     if (!role) this.notFound();
+    this.assertManageRole(actor, role);
     if (role.system && (d.name !== undefined || d.active !== undefined))
       this.invalid(
         "Vai trò hệ thống chỉ cho phép chỉnh bộ quyền; không thể đổi tên hoặc trạng thái.",
@@ -400,6 +417,13 @@ export class UserService {
         );
     }
     const data = await this.db.$transaction(async (tx) => {
+      await this.lockOrganization(tx, actor.organizationId);
+      const currentRole = await tx.role.findFirst({
+        where: { id, organizationId: actor.organizationId },
+        include: { permissions: true },
+      });
+      if (!currentRole) this.notFound();
+      this.assertManageRole(actor, currentRole);
       await tx.role.update({
         where: { id },
         data: {
@@ -505,7 +529,7 @@ export class UserService {
                 kind: true,
               },
             },
-            role: true,
+            role: { include: { permissions: true } },
             facility: true,
             stockLocation: true,
             department: true,
@@ -536,9 +560,14 @@ export class UserService {
           organizationId: actor.organizationId,
           active: true,
         },
+        include: { permissions: true },
       }),
     ]);
     if (!target || !role) this.notFound();
+    this.assertManageRole(actor, role);
+    await this.assertManageUser(actor, d.user_id);
+    if (role.code === "ADMIN_OWNER" && d.scope_type !== ScopeType.ORGANIZATION)
+      this.invalid("ADMIN chỉ được cấp ở phạm vi tổ chức.");
     if (
       target.kind === UserKind.SUPPLIER &&
       (role.code !== "SUPPLIER" || d.scope_type !== ScopeType.SUPPLIER)
@@ -555,6 +584,18 @@ export class UserService {
       );
     await this.validateScope(actor, d);
     const data = await this.db.$transaction(async (tx) => {
+      await this.lockOrganization(tx, actor.organizationId);
+      await this.assertManageUser(actor, d.user_id, tx);
+      const currentRole = await tx.role.findFirst({
+        where: {
+          id: d.role_id,
+          organizationId: actor.organizationId,
+          active: true,
+        },
+        include: { permissions: true },
+      });
+      if (!currentRole) this.notFound();
+      this.assertManageRole(actor, currentRole);
       const grant = await tx.roleGrant.create({
         data: {
           userId: d.user_id,
@@ -595,15 +636,22 @@ export class UserService {
   }
   async revoke(actor: AuthUser, id: string) {
     this.scope.assertAccess(actor, "grant.revoke", {});
-    const grant = await this.db.roleGrant.findFirst({
-      where: {
-        id,
-        revokedAt: null,
-        user: { organizationId: actor.organizationId },
-      },
-    });
-    if (!grant) this.notFound();
     const data = await this.db.$transaction(async (tx) => {
+      await this.lockOrganization(tx, actor.organizationId);
+      const grant = await tx.roleGrant.findFirst({
+        where: {
+          id,
+          revokedAt: null,
+          user: { organizationId: actor.organizationId },
+        },
+        include: { role: { include: { permissions: true } } },
+      });
+      if (!grant) this.notFound();
+      this.assertManageRole(actor, grant.role);
+      await this.assertManageUser(actor, grant.userId, tx);
+      await this.assertRemainingAdmin(tx, actor.organizationId, {
+        grantId: id,
+      });
       const g = await tx.roleGrant.update({
         where: { id },
         data: { revokedAt: new Date() },
@@ -705,14 +753,96 @@ export class UserService {
     const unknown = codes.filter((code) => !existing.has(code));
     if (unknown.length)
       this.invalid(`Quyền không tồn tại: ${unknown.join(", ")}.`);
-    if (actor.grants.some((grant) => grant.roleCode === "ADMIN_OWNER")) return;
+    if (this.isAdmin(actor)) return;
     const actorPermissions = new Set(
-      actor.grants.flatMap((grant) => grant.permissions),
+      actor.grants
+        .filter((grant) => grant.scopeType === "ORGANIZATION")
+        .flatMap((grant) => grant.permissions),
     );
     const excessive = codes.filter((code) => !actorPermissions.has(code));
     if (excessive.length)
       this.invalid(
         `Không thể cấp quyền cao hơn quyền của tài khoản hiện tại: ${excessive.join(", ")}.`,
+      );
+  }
+  private isAdmin(actor: AuthUser): boolean {
+    return (
+      actor.kind === "INTERNAL" &&
+      actor.grants.some(
+        (grant) =>
+          grant.roleCode === "ADMIN_OWNER" &&
+          grant.scopeType === "ORGANIZATION",
+      )
+    );
+  }
+  private assertManageRole(actor: AuthUser, role: ManagedRole): void {
+    if (this.isAdmin(actor)) return;
+    const held = new Set(
+      actor.grants
+        .filter((grant) => grant.scopeType === "ORGANIZATION")
+        .flatMap((grant) => grant.permissions),
+    );
+    if (
+      role.code === "ADMIN_OWNER" ||
+      role.permissions.some(
+        (permission) => !held.has(permission.permissionCode),
+      )
+    )
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        "Không thể quản lý hoặc cấp vai trò cao hơn quyền của bạn.",
+        HttpStatus.FORBIDDEN,
+      );
+  }
+  private async assertManageUser(
+    actor: AuthUser,
+    id: string,
+    db: Prisma.TransactionClient = this.db,
+  ) {
+    const target = await db.user.findFirst({
+      where: { id, organizationId: actor.organizationId },
+      include: {
+        grants: {
+          where: { revokedAt: null },
+          include: { role: { include: { permissions: true } } },
+        },
+      },
+    });
+    if (!target) this.notFound();
+    for (const grant of target.grants) this.assertManageRole(actor, grant.role);
+    return target;
+  }
+  private async lockOrganization(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+  ) {
+    // Serialize removals so two concurrent requests cannot remove both admins.
+    await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${organizationId}::uuid FOR UPDATE`;
+  }
+  private async assertRemainingAdmin(
+    tx: Prisma.TransactionClient,
+    organizationId: string,
+    excluded: { userId?: string; grantId?: string },
+  ) {
+    const remaining = await tx.user.count({
+      where: {
+        organizationId,
+        active: true,
+        kind: UserKind.INTERNAL,
+        ...(excluded.userId ? { id: { not: excluded.userId } } : {}),
+        grants: {
+          some: {
+            revokedAt: null,
+            scopeType: ScopeType.ORGANIZATION,
+            role: { code: "ADMIN_OWNER", active: true },
+            ...(excluded.grantId ? { id: { not: excluded.grantId } } : {}),
+          },
+        },
+      },
+    });
+    if (!remaining)
+      this.invalid(
+        "Phải giữ ít nhất một tài khoản ADMIN đang hoạt động ở phạm vi tổ chức.",
       );
   }
   private invalid(m: string): never {

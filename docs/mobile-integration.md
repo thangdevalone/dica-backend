@@ -4,6 +4,8 @@ Cập nhật: 09/10/2026. Nguồn quyết định: `customer-flow-questions-resp
 
 Workspace chỉ có Backend và Web Admin. Tài liệu này là contract bàn giao; chưa xác nhận ứng dụng mobile đã triển khai hay đã kiểm thử trên thiết bị.
 
+Quyền/scope có thể thay đổi trong phiên. Client cần nạp lại `/me/permissions` khi quay lại app hoặc gặp `403`, bỏ dữ liệu cache không còn được phép xem; không tự retry command bị từ chối. Thu hồi grant vô hiệu hóa phiên; `401` không refresh được thì đăng nhập lại. Quản trị tài khoản trên Web không được quản lý/cấp quyền cao hơn quyền cấp tổ chức đang có; ADMIN chỉ cấp ở scope tổ chức và không được loại bỏ ADMIN hoạt động cuối cùng.
+
 ## 1. Phân chia Mobile và Web
 
 - Mobile: xin hàng, duyệt/từ chối/hủy, xuất/nhận hàng, điều chuyển, hoàn hàng, kiểm kê, báo hỏng, xem giá/công nợ, thanh toán, báo cáo và thông báo.

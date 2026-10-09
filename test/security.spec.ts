@@ -35,11 +35,6 @@ test("mọi business route đều khai báo permission hoặc public rõ ràng",
   );
   const missing: string[] = [];
   for (const file of controllerFiles) {
-    if (
-      file.endsWith(`${path.sep}auth${path.sep}auth.controller.ts`) ||
-      file.endsWith(`${path.sep}health${path.sep}health.controller.ts`)
-    )
-      continue;
     const source = ts.createSourceFile(
       file,
       readFileSync(file, "utf8"),
@@ -61,7 +56,8 @@ test("mọi business route đều khai báo permission hoặc public rõ ràng",
         const protectedRoute = names.some(
           (name) =>
             name.startsWith("RequirePermissions(") ||
-            name.startsWith("Public("),
+            name.startsWith("Public(") ||
+            name.startsWith("Authenticated("),
         );
         if (isRoute && !protectedRoute)
           missing.push(

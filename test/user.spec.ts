@@ -13,7 +13,17 @@ const actor: AuthUser = {
   displayName: "Admin",
   sessionId: "00000000-0000-4000-8000-000000000003",
   requestId: "request-create-user",
-  grants: [],
+  grants: [
+    {
+      id: "owner-grant",
+      roleCode: "ADMIN_OWNER",
+      scopeType: "ORGANIZATION",
+      permissions: ["user.create", "grant.assign"],
+      facilityId: null,
+      stockLocationId: null,
+      departmentId: null,
+    },
+  ],
 };
 
 test("admin tạo tài khoản và role grant trong cùng transaction", async () => {
@@ -28,8 +38,11 @@ test("admin tạo tài khoản và role grant trong cùng transaction", async ()
     name: "Nhân viên",
     system: true,
     active: true,
+    permissions: [],
   };
   const transactionClient = {
+    $queryRaw: async () => [],
+    role: { findFirst: async () => role },
     user: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         userData = data;
@@ -217,7 +230,9 @@ test("ADMIN_OWNER được chỉnh bộ quyền vai trò gốc nhưng không đ�
   };
   const savedPermissions: Array<Record<string, unknown>> = [];
   const transactionClient = {
+    $queryRaw: async () => [],
     role: {
+      findFirst: async () => role,
       update: async () => role,
       findUniqueOrThrow: async () => ({
         ...role,

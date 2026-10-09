@@ -54,6 +54,10 @@ Ngày 09/10/2026:
 
 ## Release và CI
 
+RBAC được bổ sung trong lần sửa tiếp theo ngày 09/10: bảo vệ tài khoản ADMIN và role có quyền cao hơn; giới hạn cấp quyền/tạo tài khoản theo quyền cấp tổ chức; giữ ADMIN cuối cùng trong transaction có khóa tổ chức; guard mặc định từ chối với ngoại lệ public/self rõ ràng. Test hồi quy gồm hai yêu cầu thu hồi/vô hiệu hóa ADMIN chạy đồng thời. Đây là thay đổi code, không cần migration hoặc đổi bộ quyền bootstrap.
+
+Kết quả sau sửa RBAC: Backend 84/84 test PostgreSQL đạt; Web 3 test quyền/cache fingerprint đạt; build và các kiểm tra tĩnh đạt. Xem [review RBAC](docs/rbac-review.md).
+
 - [x] Cấu hình CI Backend có PostgreSQL test, migrate và `TEST_DATABASE_URL` để chạy test flow.
 - [x] Compose Backend chạy migrate và bootstrap trước khi bật API. Migration 005 thuộc lần phát hành này.
 - [ ] Xác nhận GitHub Actions của commit mới chạy thành công.
