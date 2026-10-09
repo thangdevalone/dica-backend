@@ -26,7 +26,74 @@ Base URL: `https://<host>/api/v1`. JSON request dùng `snake_case`; các entity 
 - Đối tượng có `version`: gửi `expected_version` theo detail mới nhất. `409 VERSION_CONFLICT`: tải lại và cho người dùng kiểm tra trước khi gửi lại.
 - API yêu cầu `Idempotency-Key`: dùng UUID mới cho mỗi thao tác, giữ nguyên key và payload khi retry. Backend lưu kết quả 24 giờ. Không đổi payload rồi dùng lại key.
 - Response: `{success:true,data,message,meta?,request_id,timestamp}`. Lỗi: `{success:false,code,message,details?,request_id,timestamp}`. Lưu `request_id` để tra cứu.
-- Danh sách dùng phân trang theo Swagger; không coi trang đầu là toàn bộ dữ liệu. Decimal có thể bị loại khỏi response do quyền; không thay giá bị ẩn thành 0.
+- Danh sách dùng phân trang theo hướng dẫn bên dưới và schema Swagger; không coi trang đầu là toàn bộ dữ liệu. Decimal có thể bị loại khỏi response do quyền; không thay giá bị ẩn thành 0.
+
+### Phân trang danh sách trên mobile
+
+API hỗ trợ hai cách phân trang. Mobile không cần tự tính offset hay tự tạo cursor:
+
+- **Cursor** dành cho danh sách cuộn hoặc nút “Xem thêm”. Đây là cách nên dùng mặc định trên mobile vì dữ liệu mới có thể xuất hiện trong lúc người dùng đang xem.
+- **Offset** dành cho màn hình có số trang và cần hiển thị tổng số bản ghi. Nếu không gửi `pagination_mode`, API mặc định dùng offset.
+
+#### Cursor: cách dùng khuyến nghị trên mobile
+
+Lần tải đầu không gửi `cursor`:
+
+```http
+GET /orders?pagination_mode=cursor&page_size=20
+```
+
+Response trả thông tin lấy trang tiếp theo trong `meta`:
+
+```json
+{
+  "data": [],
+  "meta": {
+    "mode": "cursor",
+    "page_size": 20,
+    "next_cursor": "uuid-cua-ban-ghi-cuoi",
+    "has_next": true
+  }
+}
+```
+
+Khi người dùng cuộn xuống cuối danh sách, gửi lại cùng bộ lọc và truyền nguyên `next_cursor` do API trả về:
+
+```http
+GET /orders?pagination_mode=cursor&page_size=20&cursor=<next_cursor>
+```
+
+Quy tắc phía mobile:
+
+1. Nối `data` mới vào cuối danh sách hiện tại.
+2. Dừng tải khi `has_next=false` hoặc `next_cursor=null`.
+3. Khi pull-to-refresh hoặc đổi search/filter/sort, bỏ cursor cũ, gọi lại trang đầu và thay toàn bộ danh sách.
+4. Không tự tạo cursor, không tăng cursor như số trang và không gửi `page` trong cursor mode.
+5. Giữ nguyên `page_size`, search, filter, `sort_by` và `sort_order` khi lấy trang tiếp theo. Chỉ gửi search/sort ở endpoint được Swagger công bố hỗ trợ.
+6. Không gọi đồng thời hai request “Xem thêm”; có thể loại trùng theo `id` khi ghép dữ liệu để an toàn khi retry.
+
+#### Offset: chỉ dùng khi giao diện có số trang
+
+```http
+GET /orders?page=2&page_size=20
+```
+
+```json
+{
+  "data": [],
+  "meta": {
+    "mode": "offset",
+    "page": 2,
+    "page_size": 20,
+    "total": 125,
+    "total_pages": 7,
+    "has_next": true,
+    "has_previous": true
+  }
+}
+```
+
+Với offset, tăng `page` để lấy trang kế tiếp. `page_size` mặc định là 20, tối đa 100. Không trộn hai kiểu: không gửi `page > 1` cùng `pagination_mode=cursor` hoặc `cursor`. Nếu endpoint chỉ hỗ trợ offset, API trả `400 VALIDATION_ERROR` khi mobile yêu cầu cursor; tuân theo schema của endpoint trên Swagger.
 
 Phiên đăng nhập:
 
