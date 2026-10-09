@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import { map, type Observable } from "rxjs";
+import { visibleResponse } from "../utils/response-visibility.js";
 interface Result {
   data: unknown;
   message?: string;
@@ -26,7 +27,13 @@ export class ResponseInterceptor implements NestInterceptor {
         return {
           success: true,
           message: result.message ?? "Thao tác thành công.",
-          data: result.data,
+          data: req.user
+            ? visibleResponse(
+                result.data,
+                req.user,
+                /\/supplier\/orders(?:\/|$|\?)/.test(req.originalUrl),
+              )
+            : result.data,
           ...(result.meta ? { meta: result.meta } : {}),
           request_id: req.requestId,
           timestamp: new Date().toISOString(),

@@ -57,15 +57,22 @@ export class CreateTransferDto {
   @IsUUID()
   to_stock_location_id!: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: String,
     format: "date-time",
     example: "2026-10-06T10:30:00+07:00",
-    description: "Thời gian dự kiến hàng đến kho nhận.",
+    description: "Bắt đầu khoảng giờ dự kiến nhận hàng.",
   })
-  @IsOptional()
   @IsISO8601({ strict: true })
-  expected_arrival_at?: string;
+  expected_arrival_at!: string;
+
+  @ApiProperty({
+    type: String,
+    format: "date-time",
+    description: "Kết thúc khoảng giờ dự kiến nhận hàng.",
+  })
+  @IsISO8601({ strict: true })
+  expected_arrival_end_at!: string;
 
   @ApiPropertyOptional({
     example: "Chuyển bổ sung nguyên liệu",

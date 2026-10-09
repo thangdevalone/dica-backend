@@ -6,5 +6,6 @@ import { R2StorageService } from "./r2-storage.service.js";
 @Module({
   controllers: [AttachmentController],
   providers: [AttachmentService, R2StorageService],
+  exports: [R2StorageService],
 })
 export class AttachmentModule {}

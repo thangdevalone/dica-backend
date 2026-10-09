@@ -170,31 +170,33 @@ enum VarianceDataStatus {
 }
 
 model Organization {
-  id            String             @id @default(uuid()) @db.Uuid
-  code          String             @unique @db.VarChar(50)
-  name          String             @db.VarChar(200)
-  active        Boolean            @default(true)
-  createdAt     DateTime           @default(now()) @map("created_at")
-  updatedAt     DateTime           @updatedAt @map("updated_at")
-  facilities    Facility[]
-  users         User[]
-  roles         Role[]
-  ingredients   Ingredient[]
-  groups        IngredientGroup[]
-  units         Unit[]
-  suppliers     Supplier[]
-  requests      SupplyRequest[]
-  orders        FulfillmentOrder[]
-  auditEvents   AuditEvent[]
-  notifications Notification[]
-  pushDevices   PushDevice[]
-  attachments   Attachment[]
-  transfers     Transfer[]
-  menuMappings  MenuItemMapping[]
-  salesBatches  SalesImportBatch[]
-  salesRecords  SalesRecord[]
-  variances     VarianceResult[]
-  alertRules    AlertRule[]
+  id                        String             @id @default(uuid()) @db.Uuid
+  code                      String             @unique @db.VarChar(50)
+  name                      String             @db.VarChar(200)
+  active                    Boolean            @default(true)
+  createdAt                 DateTime           @default(now()) @map("created_at")
+  updatedAt                 DateTime           @updatedAt @map("updated_at")
+  paymentApprovalRequired   Boolean            @default(false) @map("payment_approval_required")
+  attachmentRetentionMonths Int                @default(12) @map("attachment_retention_months")
+  facilities                Facility[]
+  users                     User[]
+  roles                     Role[]
+  ingredients               Ingredient[]
+  groups                    IngredientGroup[]
+  units                     Unit[]
+  suppliers                 Supplier[]
+  requests                  SupplyRequest[]
+  orders                    FulfillmentOrder[]
+  auditEvents               AuditEvent[]
+  notifications             Notification[]
+  pushDevices               PushDevice[]
+  attachments               Attachment[]
+  transfers                 Transfer[]
+  menuMappings              MenuItemMapping[]
+  salesBatches              SalesImportBatch[]
+  salesRecords              SalesRecord[]
+  variances                 VarianceResult[]
+  alertRules                AlertRule[]
 
   @@map("organizations")
 }
@@ -209,25 +211,25 @@ model BootstrapState {
 }
 
 model Facility {
-  id             String             @id @default(uuid()) @db.Uuid
-  organizationId String             @map("organization_id") @db.Uuid
-  code           String             @db.VarChar(50)
-  name           String             @db.VarChar(200)
-  type           FacilityType
-  active         Boolean            @default(true)
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
-  organization   Organization       @relation(fields: [organizationId], references: [id])
-  stockLocations StockLocation[]
-  departments    Department[]
-  eligibilities  ItemEligibility[]
+  id                 String             @id @default(uuid()) @db.Uuid
+  organizationId     String             @map("organization_id") @db.Uuid
+  code               String             @db.VarChar(50)
+  name               String             @db.VarChar(200)
+  type               FacilityType
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  organization       Organization       @relation(fields: [organizationId], references: [id])
+  stockLocations     StockLocation[]
+  departments        Department[]
+  eligibilities      ItemEligibility[]
   groupEligibilities GroupEligibility[]
-  sourceRules    SourceRule[]
-  requests       SupplyRequest[]
-  roleGrants     RoleGrant[]
-  menuMappings   MenuItemMapping[]
-  salesBatches   SalesImportBatch[]
-  alertRules     AlertRule[]
+  sourceRules        SourceRule[]
+  requests           SupplyRequest[]
+  roleGrants         RoleGrant[]
+  menuMappings       MenuItemMapping[]
+  salesBatches       SalesImportBatch[]
+  alertRules         AlertRule[]
 
   @@unique([organizationId, code])
   @@index([organizationId, active])
@@ -265,21 +267,21 @@ model StockLocation {
 }
 
 model Department {
-  id              String            @id @default(uuid()) @db.Uuid
-  facilityId      String            @map("facility_id") @db.Uuid
-  stockLocationId String?           @map("stock_location_id") @db.Uuid
-  code            String            @db.VarChar(50)
-  name            String            @db.VarChar(200)
-  type            DepartmentType
-  active          Boolean           @default(true)
-  createdAt       DateTime          @default(now()) @map("created_at")
-  updatedAt       DateTime          @updatedAt @map("updated_at")
-  facility        Facility          @relation(fields: [facilityId], references: [id])
-  stockLocation   StockLocation?    @relation(fields: [stockLocationId], references: [id])
-  grants          RoleGrant[]
-  eligibilities   ItemEligibility[]
+  id                 String             @id @default(uuid()) @db.Uuid
+  facilityId         String             @map("facility_id") @db.Uuid
+  stockLocationId    String?            @map("stock_location_id") @db.Uuid
+  code               String             @db.VarChar(50)
+  name               String             @db.VarChar(200)
+  type               DepartmentType
+  active             Boolean            @default(true)
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+  facility           Facility           @relation(fields: [facilityId], references: [id])
+  stockLocation      StockLocation?     @relation(fields: [stockLocationId], references: [id])
+  grants             RoleGrant[]
+  eligibilities      ItemEligibility[]
   groupEligibilities GroupEligibility[]
-  requests        SupplyRequest[]
+  requests           SupplyRequest[]
 
   @@unique([facilityId, code])
   @@index([stockLocationId])
@@ -391,12 +393,12 @@ model RoleGrant {
 }
 
 model IngredientGroup {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  code           String       @db.VarChar(50)
-  name           String       @db.VarChar(200)
-  active         Boolean      @default(true)
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  code           String             @db.VarChar(50)
+  name           String             @db.VarChar(200)
+  active         Boolean            @default(true)
+  organization   Organization       @relation(fields: [organizationId], references: [id])
   ingredients    Ingredient[]
   eligibilities  GroupEligibility[]
 
@@ -599,27 +601,28 @@ model SupplyRequest {
 }
 
 model Transfer {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  organizationId      String                  @map("organization_id") @db.Uuid
-  code                String                  @db.VarChar(50)
-  fromStockLocationId String                  @map("from_stock_location_id") @db.Uuid
-  toStockLocationId   String                  @map("to_stock_location_id") @db.Uuid
-  createdById         String                  @map("created_by_id") @db.Uuid
-  status              TransferStatus          @default(DRAFT)
-  version             Int                     @default(1)
-  note                String?                 @db.VarChar(1000)
-  expectedArrivalAt   DateTime?               @map("expected_arrival_at")
-  submittedAt         DateTime?               @map("submitted_at")
-  decidedAt           DateTime?               @map("decided_at")
-  createdAt           DateTime                @default(now()) @map("created_at")
-  updatedAt           DateTime                @updatedAt @map("updated_at")
-  organization        Organization            @relation(fields: [organizationId], references: [id])
-  fromStockLocation   StockLocation           @relation("TransferFrom", fields: [fromStockLocationId], references: [id])
-  toStockLocation     StockLocation           @relation("TransferTo", fields: [toStockLocationId], references: [id])
-  createdBy           User                    @relation("TransferCreator", fields: [createdById], references: [id])
-  lines               TransferLine[]
-  approvals           TransferApprovalEvent[]
-  orders              FulfillmentOrder[]
+  id                   String                  @id @default(uuid()) @db.Uuid
+  organizationId       String                  @map("organization_id") @db.Uuid
+  code                 String                  @db.VarChar(50)
+  fromStockLocationId  String                  @map("from_stock_location_id") @db.Uuid
+  toStockLocationId    String                  @map("to_stock_location_id") @db.Uuid
+  createdById          String                  @map("created_by_id") @db.Uuid
+  status               TransferStatus          @default(DRAFT)
+  version              Int                     @default(1)
+  note                 String?                 @db.VarChar(1000)
+  expectedArrivalAt    DateTime?               @map("expected_arrival_at")
+  expectedArrivalEndAt DateTime?               @map("expected_arrival_end_at")
+  submittedAt          DateTime?               @map("submitted_at")
+  decidedAt            DateTime?               @map("decided_at")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+  organization         Organization            @relation(fields: [organizationId], references: [id])
+  fromStockLocation    StockLocation           @relation("TransferFrom", fields: [fromStockLocationId], references: [id])
+  toStockLocation      StockLocation           @relation("TransferTo", fields: [toStockLocationId], references: [id])
+  createdBy            User                    @relation("TransferCreator", fields: [createdById], references: [id])
+  lines                TransferLine[]
+  approvals            TransferApprovalEvent[]
+  orders               FulfillmentOrder[]
 
   @@unique([organizationId, code])
   @@index([organizationId, status])
@@ -708,6 +711,9 @@ model FulfillmentOrder {
   status                     OrderStatus       @default(RELEASED)
   version                    Int               @default(1)
   releasedAt                 DateTime?         @map("released_at")
+  shortageDeadlineAt         DateTime?         @map("shortage_deadline_at")
+  paymentDueAt               DateTime?         @map("payment_due_at")
+  returns                    ReturnDocument[]
   createdAt                  DateTime          @default(now()) @map("created_at")
   updatedAt                  DateTime          @updatedAt @map("updated_at")
   organization               Organization      @relation(fields: [organizationId], references: [id])
@@ -740,6 +746,8 @@ model FulfillmentLine {
   approvedQuantity        Decimal          @map("approved_quantity") @db.Decimal(20, 3)
   dispatchedQuantity      Decimal          @default(0) @map("dispatched_quantity") @db.Decimal(20, 3)
   receivedQuantity        Decimal          @default(0) @map("received_quantity") @db.Decimal(20, 3)
+  returnedQuantity        Decimal          @default(0) @map("returned_quantity") @db.Decimal(20, 3)
+  returnLines             ReturnLine[]
   acceptedExcessQuantity  Decimal          @default(0) @map("accepted_excess_quantity") @db.Decimal(20, 3)
   closedRemainingQuantity Decimal          @default(0) @map("closed_remaining_quantity") @db.Decimal(20, 3)
   unitCodeSnapshot        String           @map("unit_code_snapshot") @db.VarChar(30)
@@ -1052,19 +1060,21 @@ model SalesImportBatch {
 }
 
 model SalesRecord {
-  id              String           @id @default(uuid()) @db.Uuid
-  organizationId  String           @map("organization_id") @db.Uuid
-  batchId         String           @map("batch_id") @db.Uuid
-  mappingId       String?          @map("mapping_id") @db.Uuid
-  source          String           @db.VarChar(50)
-  externalKey     String           @map("external_key") @db.VarChar(150)
-  externalItemKey String           @map("external_item_key") @db.VarChar(150)
-  soldAt          DateTime         @map("sold_at")
-  quantity        Decimal          @db.Decimal(20, 3)
-  validationError String?          @map("validation_error") @db.VarChar(1000)
-  organization    Organization     @relation(fields: [organizationId], references: [id])
-  batch           SalesImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  mapping         MenuItemMapping? @relation(fields: [mappingId], references: [id])
+  id                 String           @id @default(uuid()) @db.Uuid
+  organizationId     String           @map("organization_id") @db.Uuid
+  batchId            String           @map("batch_id") @db.Uuid
+  mappingId          String?          @map("mapping_id") @db.Uuid
+  source             String           @db.VarChar(50)
+  externalKey        String           @map("external_key") @db.VarChar(150)
+  externalItemKey    String           @map("external_item_key") @db.VarChar(150)
+  soldAt             DateTime         @map("sold_at")
+  quantity           Decimal          @db.Decimal(20, 3)
+  validationError    String?          @map("validation_error") @db.VarChar(1000)
+  cancelledAt        DateTime?        @map("cancelled_at")
+  cancellationReason String?          @map("cancellation_reason") @db.VarChar(1000)
+  organization       Organization     @relation(fields: [organizationId], references: [id])
+  batch              SalesImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  mapping            MenuItemMapping? @relation(fields: [mappingId], references: [id])
 
   @@unique([organizationId, source, externalKey])
   @@index([organizationId, soldAt])
@@ -1120,15 +1130,17 @@ model AlertRule {
 }
 
 model PaymentTracking {
-  id              String           @id @default(uuid()) @db.Uuid
-  orderId         String           @unique @map("order_id") @db.Uuid
-  reconciledValue Decimal          @default(0) @map("reconciled_value") @db.Decimal(20, 4)
-  paidValue       Decimal          @default(0) @map("paid_value") @db.Decimal(20, 4)
-  status          PaymentStatus    @default(UNPAID)
-  version         Int              @default(1)
-  updatedById     String           @map("updated_by_id") @db.Uuid
-  updatedAt       DateTime         @updatedAt @map("updated_at")
-  order           FulfillmentOrder @relation(fields: [orderId], references: [id])
+  id               String           @id @default(uuid()) @db.Uuid
+  orderId          String           @unique @map("order_id") @db.Uuid
+  reconciledValue  Decimal          @default(0) @map("reconciled_value") @db.Decimal(20, 4)
+  pendingPaidValue Decimal?         @map("pending_paid_value") @db.Decimal(20, 4)
+  confirmedById    String?          @map("confirmed_by_id") @db.Uuid
+  paidValue        Decimal          @default(0) @map("paid_value") @db.Decimal(20, 4)
+  status           PaymentStatus    @default(UNPAID)
+  version          Int              @default(1)
+  updatedById      String           @map("updated_by_id") @db.Uuid
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  order            FulfillmentOrder @relation(fields: [orderId], references: [id])
 
   @@index([updatedAt, id])
   @@map("payment_tracking")
@@ -1180,6 +1192,7 @@ model Notification {
   resourceType   String             @map("resource_type") @db.VarChar(100)
   resourceId     String             @map("resource_id") @db.VarChar(100)
   status         NotificationStatus @default(UNREAD)
+  lastRemindedAt DateTime           @default(now()) @map("last_reminded_at")
   readAt         DateTime?          @map("read_at")
   createdAt      DateTime           @default(now()) @map("created_at")
   organization   Organization       @relation(fields: [organizationId], references: [id])
@@ -1211,21 +1224,21 @@ model PushDevice {
 }
 
 model Attachment {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @map("organization_id") @db.Uuid
-  uploadedById   String       @map("uploaded_by_id") @db.Uuid
-  resourceType   String       @map("resource_type") @db.VarChar(30)
-  resourceId     String       @map("resource_id") @db.Uuid
-  fileName       String       @map("file_name") @db.VarChar(255)
-  mimeType       String       @map("mime_type") @db.VarChar(100)
-  sizeBytes      Int          @map("size_bytes")
-  objectKey      String?      @unique @map("object_key") @db.VarChar(512)
-  content        Bytes?
-  uploadStatus   String       @default("READY") @map("upload_status") @db.VarChar(20)
+  id              String       @id @default(uuid()) @db.Uuid
+  organizationId  String       @map("organization_id") @db.Uuid
+  uploadedById    String       @map("uploaded_by_id") @db.Uuid
+  resourceType    String       @map("resource_type") @db.VarChar(30)
+  resourceId      String       @map("resource_id") @db.Uuid
+  fileName        String       @map("file_name") @db.VarChar(255)
+  mimeType        String       @map("mime_type") @db.VarChar(100)
+  sizeBytes       Int          @map("size_bytes")
+  objectKey       String?      @unique @map("object_key") @db.VarChar(512)
+  content         Bytes?
+  uploadStatus    String       @default("READY") @map("upload_status") @db.VarChar(20)
   uploadExpiresAt DateTime?    @map("upload_expires_at")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  uploadedBy     User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+  createdAt       DateTime     @default(now()) @map("created_at")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedBy      User         @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, resourceType, resourceId, createdAt])
   @@index([organizationId, uploadStatus, uploadExpiresAt])
@@ -1247,4 +1260,49 @@ model OutboxEvent {
 
   @@index([status, availableAt, createdAt])
   @@map("outbox_events")
+}
+
+model PriceRule {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  ingredientId     String   @map("ingredient_id") @db.Uuid
+  basePrice        Decimal  @map("base_price") @db.Decimal(20, 4)
+  tolerancePercent Decimal  @default(10) @map("tolerance_percent") @db.Decimal(10, 4)
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([organizationId, ingredientId])
+  @@map("price_rules")
+}
+
+model ReturnDocument {
+  id           String           @id @default(uuid()) @db.Uuid
+  orderId      String           @map("order_id") @db.Uuid
+  code         String           @unique @db.VarChar(50)
+  status       DocumentStatus   @default(DRAFT)
+  version      Int              @default(1)
+  createdById  String           @map("created_by_id") @db.Uuid
+  approvedById String?          @map("approved_by_id") @db.Uuid
+  note         String           @db.VarChar(1000)
+  decisionNote String?          @map("decision_note") @db.VarChar(1000)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  approvedAt   DateTime?        @map("approved_at")
+  settleAt     DateTime?        @map("settle_at")
+  postedAt     DateTime?        @map("posted_at")
+  order        FulfillmentOrder @relation(fields: [orderId], references: [id])
+  lines        ReturnLine[]
+
+  @@index([status, settleAt])
+  @@map("return_documents")
+}
+
+model ReturnLine {
+  id          String          @id @default(uuid()) @db.Uuid
+  returnId    String          @map("return_id") @db.Uuid
+  orderLineId String          @map("order_line_id") @db.Uuid
+  quantity    Decimal         @db.Decimal(20, 3)
+  document    ReturnDocument  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderLine   FulfillmentLine @relation(fields: [orderLineId], references: [id])
+
+  @@unique([returnId, orderLineId])
+  @@map("return_lines")
 }

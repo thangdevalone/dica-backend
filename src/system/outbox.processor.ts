@@ -1,3 +1,4 @@
+import { notifyPermission } from "../common/utils/notify.js";
 import {
   Injectable,
   Logger,
@@ -74,6 +75,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
       async (tx) => {
         const event = await tx.outboxEvent.findFirst({
           where: {
+            type: { not: "ATTACHMENT_PURGE" },
             status: { in: [OutboxStatus.PENDING, OutboxStatus.FAILED] },
             availableAt: { lte: new Date() },
             attempts: { lt: 5 },
@@ -288,6 +290,19 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
         },
       ];
       if (type === "TRANSFER_APPROVED") {
+        await notifyPermission(
+          tx,
+          transfer.organizationId,
+          "transfer.approve",
+          {
+            facilityId: transfer.toStockLocation.facilityId,
+            stockLocationId: transfer.toStockLocationId,
+          },
+          "Điều chuyển đã được phát hành",
+          `Phiếu ${transfer.code} đã được phát hành, bao gồm tuyến tự duyệt Kho tổng/Bếp tổng.`,
+          "Transfer",
+          transfer.id,
+        );
         const receivers = await this.usersWithPermission(
           tx,
           transfer.organizationId,

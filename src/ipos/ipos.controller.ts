@@ -15,6 +15,7 @@ import { RequirePermissions } from "../auth/decorators/permissions.decorator.js"
 import { ConfigAudit } from "../common/audit/config-audit.decorator.js";
 import { ApiEndpoint } from "../common/swagger/api-endpoint.decorator.js";
 import {
+  CancelSalesRecordDto,
   CreateAlertRuleDto,
   CreateMappingDto,
   CreateRecipeDto,
@@ -31,6 +32,18 @@ import { IposService } from "./ipos.service.js";
 @Controller()
 export class IposController {
   constructor(private readonly service: IposService) {}
+
+  @Post("sales-records/:id/cancel")
+  @ApiEndpoint("Ghi nhận hủy dữ liệu bán hàng đã nhập", { audience: "mobile" })
+  @RequirePermissions("sales_import.commit")
+  cancelSale(
+    @CurrentUser() user: AuthUser,
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: CancelSalesRecordDto,
+    @Headers("idempotency-key") key?: string,
+  ) {
+    return this.service.cancelSale(user, id, dto.reason, key);
+  }
 
   @Get("sales-imports/adapter-status")
   @ApiEndpoint("Kiểm tra trạng thái kết nối bộ chuyển đổi iPOS", {

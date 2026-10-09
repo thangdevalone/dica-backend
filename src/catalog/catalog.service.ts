@@ -1,3 +1,4 @@
+import { alertSupplierPrice } from "../common/utils/price-alert.js";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth.types.js";
 import { ScopeService } from "../auth/scope.service.js";
@@ -176,6 +177,8 @@ export class CatalogService {
   }
   async link(u: AuthUser, d: D.LinkSupplierIngredientDto) {
     this.scope.assertAccess(u, "supplier_ingredient.manage", {});
+    if (d.reference_price !== undefined)
+      this.scope.assertAccess(u, "price.update", {});
     const [s, i] = await Promise.all([
       this.db.supplier.count({
         where: {
@@ -194,6 +197,14 @@ export class CatalogService {
     ]);
     if (!s || !i) this.invalid();
     const data = await this.db.$transaction(async (tx) => {
+      if (d.reference_price != null)
+        await alertSupplierPrice(
+          tx,
+          u,
+          d.ingredient_id,
+          d.supplier_id,
+          d.reference_price,
+        );
       if (d.is_preferred)
         await tx.supplierIngredient.updateMany({
           where: { ingredientId: d.ingredient_id, isPreferred: true },
@@ -469,6 +480,8 @@ export class CatalogService {
     d: D.UpdateSupplierIngredientDto,
   ) {
     this.scope.assertAccess(u, "supplier_ingredient.manage", {});
+    if (d.reference_price !== undefined)
+      this.scope.assertAccess(u, "price.update", {});
     const existing = await this.db.supplierIngredient.findFirst({
       where: { id, supplier: { organizationId: u.organizationId } },
       include: {
@@ -486,6 +499,14 @@ export class CatalogService {
     )
       this.invalidMessage("Nhà cung cấp ưu tiên phải đang hoạt động.");
     const data = await this.db.$transaction(async (tx) => {
+      if (d.reference_price != null)
+        await alertSupplierPrice(
+          tx,
+          u,
+          existing.ingredientId,
+          existing.supplierId,
+          d.reference_price,
+        );
       if (d.is_preferred)
         await tx.supplierIngredient.updateMany({
           where: {

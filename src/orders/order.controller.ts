@@ -25,7 +25,7 @@ import { OrderService } from "./order.service.js";
 export class OrderController {
   constructor(private s: OrderService) {}
   @Post("orders/:id/close-outstanding")
-  @ApiEndpoint("Đóng phần số lượng còn thiếu của đơn", { adminWeb: true })
+  @ApiEndpoint("Đóng phần số lượng còn thiếu của đơn", { mobile: true })
   @RequirePermissions("order.close_outstanding")
   closeOutstanding(
     @CurrentUser() u: AuthUser,
@@ -35,7 +35,7 @@ export class OrderController {
     return this.s.closeOutstanding(u, id, d);
   }
   @Post("orders/:id/cancel")
-  @ApiEndpoint("Hủy đơn thực hiện", { adminWeb: true })
+  @ApiEndpoint("Hủy đơn thực hiện", { mobile: true })
   @RequirePermissions("order.cancel")
   cancel(
     @CurrentUser() u: AuthUser,
@@ -44,13 +44,13 @@ export class OrderController {
   ) {
     return this.s.cancel(u, id, d);
   }
-  @ApiEndpoint("Xem danh sách đơn thực hiện", { audience: "both" })
+  @ApiEndpoint("Xem danh sách đơn thực hiện", { audience: "mobile" })
   @Get("orders")
   @RequirePermissions("order.read")
   list(@CurrentUser() u: AuthUser, @Query() q: OrderListQueryDto) {
     return this.s.list(u, q);
   }
-  @ApiEndpoint("Xem chi tiết đơn thực hiện", { audience: "both" })
+  @ApiEndpoint("Xem chi tiết đơn thực hiện", { audience: "mobile" })
   @Get("orders/:id")
   @RequirePermissions("order.read")
   detail(@CurrentUser() u: AuthUser, @Param("id", ParseUUIDPipe) id: string) {

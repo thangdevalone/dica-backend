@@ -24,7 +24,7 @@ export class ReportingController {
 
   @Get("orders/:id/payment-tracking")
   @ApiEndpoint("Xem thông tin theo dõi thanh toán của đơn", {
-    audience: "admin-web",
+    audience: "mobile",
   })
   @RequirePermissions("payment_tracking.read")
   payment(
@@ -36,7 +36,7 @@ export class ReportingController {
 
   @Put("orders/:id/payment-tracking")
   @ApiEndpoint("Cập nhật giá trị đã thanh toán của đơn", {
-    audience: "admin-web",
+    audience: "mobile",
   })
   @RequirePermissions("payment_tracking.update")
   updatePayment(
@@ -49,35 +49,35 @@ export class ReportingController {
   }
 
   @Get("reports/stock")
-  @ApiEndpoint("Xem báo cáo tồn kho", { adminWeb: true })
+  @ApiEndpoint("Xem báo cáo tồn kho", { mobile: true })
   @RequirePermissions("report.stock")
   stock(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.stockReport(user, query);
   }
 
   @Get("reports/fulfillment")
-  @ApiEndpoint("Xem báo cáo mức độ đáp ứng đơn", { adminWeb: true })
+  @ApiEndpoint("Xem báo cáo mức độ đáp ứng đơn", { mobile: true })
   @RequirePermissions("report.fulfillment")
   fulfillment(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.fulfillmentReport(user, query);
   }
 
   @Get("reports/damage")
-  @ApiEndpoint("Xem báo cáo hàng hỏng", { adminWeb: true })
+  @ApiEndpoint("Xem báo cáo hàng hỏng", { mobile: true })
   @RequirePermissions("report.damage")
   damage(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.damageReport(user, query);
   }
 
   @Get("reports/variance")
-  @ApiEndpoint("Xem báo cáo chênh lệch định mức", { adminWeb: true })
+  @ApiEndpoint("Xem báo cáo chênh lệch định mức", { mobile: true })
   @RequirePermissions("report.variance")
   variance(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.varianceReport(user, query);
   }
 
   @Get("reports/payment")
-  @ApiEndpoint("Xem báo cáo thanh toán", { adminWeb: true })
+  @ApiEndpoint("Xem báo cáo thanh toán", { mobile: true })
   @RequirePermissions("report.payment")
   paymentReport(@CurrentUser() user: AuthUser, @Query() query: ReportQueryDto) {
     return this.service.paymentReport(user, query);

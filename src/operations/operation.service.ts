@@ -143,9 +143,6 @@ export class OperationService {
   }
 
   async approveAdjustment(user: AuthUser, id: string, dto: VersionDto) {
-    this.assertDemoPolicy(
-      "Chính sách duyệt điều chỉnh tồn kho chưa được chốt cho production.",
-    );
     const adjustment = await this.loadAdjustment(user, id);
     this.scope.assertAccess(user, "adjustment.approve", {
       facilityId: adjustment.stockLocation.facilityId,
@@ -200,9 +197,6 @@ export class OperationService {
     dto: VersionDto,
     rawKey?: string,
   ) {
-    this.assertDemoPolicy(
-      "Chính sách hạch toán điều chỉnh tồn kho chưa được chốt cho production.",
-    );
     const key = this.idempotency.requireKey(rawKey);
     const result = await this.idempotency.execute(
       user,
@@ -226,27 +220,6 @@ export class OperationService {
         });
         if (adjustment.version !== dto.expected_version) this.version();
         if (adjustment.status !== AdjustmentStatus.APPROVED) this.state();
-        const current = await tx.stockBalance.findUnique({
-          where: {
-            stockLocationId_ingredientId: {
-              stockLocationId: adjustment.stockLocationId,
-              ingredientId: adjustment.ingredientId,
-            },
-          },
-        });
-        const next = (current?.quantity ?? new Prisma.Decimal(0)).add(
-          adjustment.quantity,
-        );
-        if (next.isNegative())
-          throw new ApiException(
-            ErrorCode.INSUFFICIENT_STOCK,
-            "Điều chỉnh sẽ làm tồn kho âm nên không thể hạch toán.",
-            HttpStatus.CONFLICT,
-            {
-              current_quantity: current?.quantity.toString() ?? "0",
-              adjustment_quantity: adjustment.quantity.toString(),
-            },
-          );
         await tx.stockLedgerEntry.create({
           data: {
             stockLocationId: adjustment.stockLocationId,
@@ -260,58 +233,24 @@ export class OperationService {
             postedById: user.id,
           },
         });
-        let stockQuantity: Prisma.Decimal;
-        if (adjustment.quantity.isNegative()) {
-          const changed = await tx.stockBalance.updateMany({
-            where: {
+        const balance = await tx.stockBalance.upsert({
+          where: {
+            stockLocationId_ingredientId: {
               stockLocationId: adjustment.stockLocationId,
               ingredientId: adjustment.ingredientId,
-              quantity: { gte: adjustment.quantity.abs() },
             },
-            data: {
-              quantity: { increment: adjustment.quantity },
-              version: { increment: 1 },
-            },
-          });
-          if (changed.count !== 1)
-            throw new ApiException(
-              ErrorCode.INSUFFICIENT_STOCK,
-              "Tồn kho đã thay đổi hoặc không đủ để hạch toán điều chỉnh.",
-              HttpStatus.CONFLICT,
-            );
-          stockQuantity = (
-            await tx.stockBalance.findUniqueOrThrow({
-              where: {
-                stockLocationId_ingredientId: {
-                  stockLocationId: adjustment.stockLocationId,
-                  ingredientId: adjustment.ingredientId,
-                },
-              },
-              select: { quantity: true },
-            })
-          ).quantity;
-        } else {
-          stockQuantity = (
-            await tx.stockBalance.upsert({
-              where: {
-                stockLocationId_ingredientId: {
-                  stockLocationId: adjustment.stockLocationId,
-                  ingredientId: adjustment.ingredientId,
-                },
-              },
-              create: {
-                stockLocationId: adjustment.stockLocationId,
-                ingredientId: adjustment.ingredientId,
-                quantity: adjustment.quantity,
-              },
-              update: {
-                quantity: { increment: adjustment.quantity },
-                version: { increment: 1 },
-              },
-              select: { quantity: true },
-            })
-          ).quantity;
-        }
+          },
+          create: {
+            stockLocationId: adjustment.stockLocationId,
+            ingredientId: adjustment.ingredientId,
+            quantity: adjustment.quantity,
+          },
+          update: {
+            quantity: { increment: adjustment.quantity },
+            version: { increment: 1 },
+          },
+        });
+        const stockQuantity = balance.quantity;
         const updated = await tx.inventoryAdjustment.update({
           where: { id },
           data: {
@@ -592,7 +531,23 @@ export class OperationService {
             resourceType: "Stocktake",
             resourceId: id,
             requestId: user.requestId,
-            afterData: { status: "SUBMITTED", version: updated.version },
+            afterData: {
+              status: "SUBMITTED",
+              version: updated.version,
+              highlight: updated.lines.some(
+                (line) => line.varianceQuantity?.isZero() === false,
+              )
+                ? "RED"
+                : null,
+              variances: updated.lines
+                .filter((line) => line.varianceQuantity?.isZero() === false)
+                .map((line) => ({
+                  ingredient_id: line.ingredientId,
+                  expected: line.expectedQuantitySnapshot?.toString(),
+                  counted: line.countedQuantity.toString(),
+                  variance: line.varianceQuantity?.toString(),
+                })),
+            },
           },
         });
         await tx.outboxEvent.create({
@@ -852,7 +807,7 @@ export class OperationService {
         id,
         stockLocation: { facility: { organizationId: user.organizationId } },
       },
-      include: { stockLocation: true },
+      include: { stockLocation: true, lines: true },
     });
     if (!report) this.notFound("báo hỏng");
     this.scope.assertAccess(user, "damage.submit", {
@@ -862,38 +817,98 @@ export class OperationService {
     });
     if (report.version !== dto.expected_version) this.version();
     if (report.status !== DamageStatus.DRAFT) this.state();
-    const data = await this.db.$transaction(async (tx) => {
-      const updated = await tx.damageReport.update({
-        where: { id },
-        data: {
-          status: DamageStatus.SUBMITTED,
-          submittedAt: new Date(),
-          version: { increment: 1 },
-        },
-      });
-      await tx.outboxEvent.create({
-        data: {
-          type: "DAMAGE_SUBMITTED",
-          aggregateType: "DamageReport",
-          aggregateId: id,
-          payload: { damage_report_id: id },
-        },
-      });
-      return updated;
-    });
+    const data = await this.db.$transaction(
+      async (tx) => {
+        const images = await tx.attachment.count({
+          where: {
+            organizationId: user.organizationId,
+            resourceType: "DAMAGE_REPORT",
+            resourceId: id,
+            uploadStatus: "READY",
+          },
+        });
+        if (images < 1 || images > 10)
+          this.invalid("Báo hỏng cần từ 1 đến 10 ảnh.");
+        const guard = await tx.damageReport.updateMany({
+          where: {
+            id,
+            version: dto.expected_version,
+            status: DamageStatus.DRAFT,
+          },
+          data: {
+            status: DamageStatus.SUBMITTED,
+            submittedAt: new Date(),
+            version: { increment: 1 },
+          },
+        });
+        if (guard.count !== 1) this.version();
+        for (const line of [...report.lines].sort((a, b) =>
+          a.ingredientId.localeCompare(b.ingredientId),
+        )) {
+          await tx.stockLedgerEntry.create({
+            data: {
+              stockLocationId: report.stockLocationId,
+              ingredientId: line.ingredientId,
+              entryType: LedgerEntryType.DAMAGE,
+              quantity: line.quantity.neg(),
+              sourceType: "DamageReport",
+              sourceId: id,
+              sourceLineId: line.id,
+              postingKey: `DAMAGE:${line.id}`,
+              postedById: user.id,
+            },
+          });
+          await tx.stockBalance.upsert({
+            where: {
+              stockLocationId_ingredientId: {
+                stockLocationId: report.stockLocationId,
+                ingredientId: line.ingredientId,
+              },
+            },
+            create: {
+              stockLocationId: report.stockLocationId,
+              ingredientId: line.ingredientId,
+              quantity: line.quantity.neg(),
+            },
+            update: {
+              quantity: { decrement: line.quantity },
+              version: { increment: 1 },
+            },
+          });
+        }
+        await tx.auditEvent.create({
+          data: {
+            organizationId: user.organizationId,
+            actorId: user.id,
+            action: "damage.submit",
+            resourceType: "DamageReport",
+            resourceId: id,
+            requestId: user.requestId,
+            afterData: { inventory_posted: true },
+          },
+        });
+        const updated = await tx.damageReport.findUniqueOrThrow({
+          where: { id },
+        });
+        await tx.outboxEvent.create({
+          data: {
+            type: "DAMAGE_SUBMITTED",
+            aggregateType: "DamageReport",
+            aggregateId: id,
+            payload: { damage_report_id: id },
+          },
+        });
+        return updated;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return {
       data,
-      message: "Gửi báo hỏng thành công; tồn kho chưa bị điều chỉnh.",
+      message: "Gửi báo hỏng và ghi giảm tồn kho thành công.",
     };
   }
 
   async confirmDamage(user: AuthUser, id: string, dto: VersionDto) {
-    if (!this.config.get<boolean>("DEMO_POLICY_ENABLED", false))
-      throw new ApiException(
-        ErrorCode.POLICY_NOT_CONFIGURED,
-        "Chính sách xác nhận báo hỏng chưa được duyệt cho production.",
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
     const report = await this.db.damageReport.findFirst({
       where: {
         id,
@@ -909,14 +924,22 @@ export class OperationService {
     if (report.version !== dto.expected_version) this.version();
     if (report.status !== DamageStatus.SUBMITTED) this.state();
     const data = await this.db.$transaction(async (tx) => {
-      const updated = await tx.damageReport.update({
-        where: { id },
+      const guard = await tx.damageReport.updateMany({
+        where: {
+          id,
+          status: DamageStatus.SUBMITTED,
+          version: dto.expected_version,
+        },
         data: {
           status: DamageStatus.CONFIRMED,
           confirmedById: user.id,
           confirmedAt: new Date(),
           version: { increment: 1 },
         },
+      });
+      if (guard.count !== 1) this.version();
+      const updated = await tx.damageReport.findUniqueOrThrow({
+        where: { id },
       });
       await tx.auditEvent.create({
         data: {
@@ -928,8 +951,8 @@ export class OperationService {
           requestId: user.requestId,
           afterData: {
             status: "CONFIRMED",
-            inventory_posted: false,
-            policy: "DEMO_V1",
+            inventory_posted: true,
+            policy: "CUSTOMER_FLOW_20261008",
           },
         },
       });
@@ -946,7 +969,7 @@ export class OperationService {
     return {
       data,
       message:
-        "Xác nhận báo hỏng theo policy demo thành công; tồn kho chưa bị điều chỉnh.",
+        "Xác nhận báo hỏng thành công; không ghi giảm tồn kho lần thứ hai.",
     };
   }
 

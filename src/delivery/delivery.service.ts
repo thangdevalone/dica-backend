@@ -1,3 +1,4 @@
+import { paymentValue, paymentStatus } from "../common/utils/payment.js";
 import { randomUUID } from "node:crypto";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -91,12 +92,6 @@ export class DeliveryService {
   }
 
   async resolveDiscrepancy(u: AuthUser, id: string, d: ResolveDiscrepancyDto) {
-    if (!this.config.get<boolean>("DEMO_POLICY_ENABLED", false))
-      throw new ApiException(
-        ErrorCode.POLICY_NOT_CONFIGURED,
-        "Chính sách xử lý chênh lệch chưa được chốt cho production.",
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
     const discrepancy = await this.db.discrepancyCase.findFirst({
       where: { id, receipt: { order: { organizationId: u.organizationId } } },
       include: {
@@ -347,12 +342,28 @@ export class DeliveryService {
             },
           },
         });
-        if (!doc || !doc.order.sourceStockLocation) this.notFound("phiếu xuất");
+        if (
+          !doc ||
+          doc.order.organizationId !== u.organizationId ||
+          !doc.order.sourceStockLocation
+        )
+          this.notFound("phiếu xuất");
         this.scope.assertAccess(u, "dispatch.post", {
           facilityId: doc.order.sourceStockLocation.facilityId,
           stockLocationId: doc.order.sourceStockLocation.id,
         });
-        if (doc.status !== DispatchStatus.DRAFT) this.state();
+        if (
+          doc.status !== DispatchStatus.DRAFT ||
+          ![OrderStatus.RELEASED, OrderStatus.PARTIAL].includes(
+            doc.order.status as "RELEASED" | "PARTIAL",
+          )
+        )
+          this.state();
+        if (
+          doc.order.shortageDeadlineAt &&
+          doc.order.shortageDeadlineAt <= new Date()
+        )
+          this.state();
         if (doc.version !== d.expected_version) this.version();
         const transit = await tx.stockLocation.findFirst({
           where: {
@@ -377,24 +388,6 @@ export class DeliveryService {
             qty = l.quantity;
           if (qty.gt(current.approvedQuantity.sub(current.dispatchedQuantity)))
             this.exceeds(l.orderLineId);
-          const balance = await tx.stockBalance.findUnique({
-            where: {
-              stockLocationId_ingredientId: {
-                stockLocationId: doc.order.sourceStockLocation.id,
-                ingredientId: current.ingredientId,
-              },
-            },
-          });
-          if (!balance || balance.quantity.lt(qty))
-            throw new ApiException(
-              ErrorCode.INSUFFICIENT_STOCK,
-              "Tồn kho không đủ để xuất.",
-              HttpStatus.CONFLICT,
-              {
-                order_line_id: l.orderLineId,
-                available: balance?.quantity.toString() ?? "0",
-              },
-            );
           await this.postBalance(
             tx,
             doc.order.sourceStockLocation.id,
@@ -437,6 +430,24 @@ export class DeliveryService {
           },
         });
         await this.refreshOrder(tx, doc.orderId);
+        await tx.discrepancyCase.updateMany({
+          where: {
+            type: "SHORTAGE",
+            status: "OPEN",
+            receiptLine: {
+              orderLine: {
+                orderId: doc.orderId,
+                order: { status: "COMPLETED" },
+              },
+            },
+          },
+          data: {
+            status: "RESOLVED",
+            resolution: "DELIVERED_IN_FULL",
+            resolvedAt: new Date(),
+            resolvedById: u.id,
+          },
+        });
         await tx.auditEvent.create({
           data: {
             organizationId: u.organizationId,
@@ -547,7 +558,8 @@ export class DeliveryService {
             lines: { include: { orderLine: true } },
           },
         });
-        if (!doc) this.notFound("phiếu nhận");
+        if (!doc || doc.order.organizationId !== u.organizationId)
+          this.notFound("phiếu nhận");
         this.scope.assertAccess(u, "receipt.post", {
           facilityId: doc.order.destinationStockLocation.facilityId,
           stockLocationId: doc.order.destinationStockLocationId,
@@ -562,10 +574,10 @@ export class DeliveryService {
             uploadStatus: "READY",
           },
         });
-        if (readyImageCount < 1)
+        if (readyImageCount < 1 || readyImageCount > 10)
           throw new ApiException(
             ErrorCode.VALIDATION_ERROR,
-            "Cần đính kèm ít nhất một ảnh kiểm nhận trước khi ghi sổ phiếu nhận.",
+            "Mỗi lần nhận hàng cần từ 1 đến 10 ảnh kiểm nhận đã tải xong.",
             HttpStatus.UNPROCESSABLE_ENTITY,
           );
         if (
@@ -573,6 +585,15 @@ export class DeliveryService {
           doc.order.status !== OrderStatus.PARTIAL
         )
           this.state();
+        if (
+          doc.order.shortageDeadlineAt &&
+          doc.order.shortageDeadlineAt <= new Date()
+        )
+          throw new ApiException(
+            ErrorCode.INVALID_STATE,
+            "Đã hết ngày giao bù; cần tạo phiếu mới.",
+            HttpStatus.CONFLICT,
+          );
         let transitId: string | undefined;
         const acceptedByOrderLine = new Map<string, Prisma.Decimal>();
         if (doc.order.sourceType === OrderSourceType.STOCK) {
@@ -694,6 +715,20 @@ export class DeliveryService {
               key,
               u.id,
             );
+          if (excess.gt(0)) {
+            await this.postBalance(
+              tx,
+              doc.order.destinationStockLocationId,
+              current.ingredientId,
+              excess,
+              LedgerEntryType.RECEIPT_IN,
+              "ReceiptExcess",
+              doc.id,
+              l.id,
+              key,
+              u.id,
+            );
+          }
           await tx.receiptLine.update({
             where: { id: l.id },
             data: { acceptedQuantity: accepted, excessQuantity: excess },
@@ -702,6 +737,7 @@ export class DeliveryService {
             where: { id: current.id },
             data: {
               receivedQuantity: { increment: accepted },
+              acceptedExcessQuantity: { increment: excess },
               version: { increment: 1 },
             },
           });
@@ -726,6 +762,43 @@ export class DeliveryService {
           },
         });
         await this.refreshOrder(tx, doc.orderId);
+        const payment = await tx.paymentTracking.findUnique({
+          where: { orderId: doc.orderId },
+        });
+        if (payment) {
+          const lines = await tx.fulfillmentLine.findMany({
+            where: { orderId: doc.orderId },
+          });
+          const value = paymentValue(lines);
+          if (value !== null)
+            await tx.paymentTracking.update({
+              where: { orderId: doc.orderId },
+              data: {
+                reconciledValue: value,
+                status: paymentStatus(payment.paidValue, value),
+                version: { increment: 1 },
+              },
+            });
+        }
+
+        await tx.discrepancyCase.updateMany({
+          where: {
+            type: "SHORTAGE",
+            status: "OPEN",
+            receiptLine: {
+              orderLine: {
+                orderId: doc.orderId,
+                order: { status: "COMPLETED" },
+              },
+            },
+          },
+          data: {
+            status: "RESOLVED",
+            resolution: "DELIVERED_IN_FULL",
+            resolvedAt: new Date(),
+            resolvedById: u.id,
+          },
+        });
         await tx.auditEvent.create({
           data: {
             organizationId: u.organizationId,
@@ -780,28 +853,10 @@ export class DeliveryService {
         sourceType,
         sourceId,
         sourceLineId: lineId,
-        postingKey: `${type}:${lineId}:${loc}`,
+        postingKey: `${sourceType}:${type}:${lineId}:${loc}`,
         postedById: user,
       },
     });
-    if (qty.isNegative()) {
-      const changed = await tx.stockBalance.updateMany({
-        where: {
-          stockLocationId: loc,
-          ingredientId: item,
-          quantity: { gte: qty.abs() },
-        },
-        data: { quantity: { increment: qty }, version: { increment: 1 } },
-      });
-      if (changed.count !== 1)
-        throw new ApiException(
-          ErrorCode.INSUFFICIENT_STOCK,
-          "Tồn kho đã thay đổi hoặc không đủ để hạch toán.",
-          HttpStatus.CONFLICT,
-          { stock_location_id: loc, ingredient_id: item },
-        );
-      return;
-    }
     await tx.stockBalance.upsert({
       where: {
         stockLocationId_ingredientId: {

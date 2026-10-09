@@ -13,7 +13,6 @@ const validEnvironment = {
   R2_ACCESS_KEY_ID: "access-key-id",
   R2_SECRET_ACCESS_KEY: "secret-access-key",
   R2_BUCKET: "dica-attachments",
-  R2_PUBLIC_BASE_URL: "https://assets.example.com",
 };
 
 test("từ chối JWT secret mặc định hoặc dùng chung", () => {

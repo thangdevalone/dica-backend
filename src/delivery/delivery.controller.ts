@@ -28,7 +28,7 @@ import { DeliveryService } from "./delivery.service.js";
 export class DeliveryController {
   constructor(private s: DeliveryService) {}
   @Get("discrepancies")
-  @ApiEndpoint("Xem danh sách chênh lệch giao nhận", { audience: "both" })
+  @ApiEndpoint("Xem danh sách chênh lệch giao nhận", { audience: "mobile" })
   @RequirePermissions("discrepancy.read")
   discrepancies(
     @CurrentUser() u: AuthUser,
@@ -37,7 +37,7 @@ export class DeliveryController {
     return this.s.discrepancies(u, q);
   }
   @Post("discrepancies/:id/resolve")
-  @ApiEndpoint("Xử lý một chênh lệch giao nhận", { adminWeb: true })
+  @ApiEndpoint("Xử lý một chênh lệch giao nhận", { mobile: true })
   @RequirePermissions("discrepancy.resolve")
   resolveDiscrepancy(
     @CurrentUser() u: AuthUser,
@@ -47,13 +47,13 @@ export class DeliveryController {
     return this.s.resolveDiscrepancy(u, id, d);
   }
   @Get("dispatches")
-  @ApiEndpoint("Xem danh sách phiếu xuất/giao hàng", { audience: "both" })
+  @ApiEndpoint("Xem danh sách phiếu xuất/giao hàng", { audience: "mobile" })
   @RequirePermissions("dispatch.read")
   dispatches(@CurrentUser() u: AuthUser, @Query() q: DeliveryListQueryDto) {
     return this.s.dispatches(u, q);
   }
   @Get("dispatches/:id")
-  @ApiEndpoint("Xem chi tiết phiếu xuất/giao hàng", { audience: "both" })
+  @ApiEndpoint("Xem chi tiết phiếu xuất/giao hàng", { audience: "mobile" })
   @RequirePermissions("dispatch.read")
   dispatchDetail(
     @CurrentUser() u: AuthUser,
@@ -62,13 +62,13 @@ export class DeliveryController {
     return this.s.dispatch(u, id);
   }
   @Get("receipts")
-  @ApiEndpoint("Xem danh sách phiếu nhận hàng", { audience: "both" })
+  @ApiEndpoint("Xem danh sách phiếu nhận hàng", { audience: "mobile" })
   @RequirePermissions("receipt.read")
   receipts(@CurrentUser() u: AuthUser, @Query() q: DeliveryListQueryDto) {
     return this.s.receipts(u, q);
   }
   @Get("receipts/:id")
-  @ApiEndpoint("Xem chi tiết phiếu nhận hàng", { audience: "both" })
+  @ApiEndpoint("Xem chi tiết phiếu nhận hàng", { audience: "mobile" })
   @RequirePermissions("receipt.read")
   receiptDetail(
     @CurrentUser() u: AuthUser,
@@ -76,13 +76,13 @@ export class DeliveryController {
   ) {
     return this.s.receipt(u, id);
   }
-  @ApiEndpoint("Tạo phiếu xuất/giao hàng", { audience: "both" })
+  @ApiEndpoint("Tạo phiếu xuất/giao hàng", { audience: "mobile" })
   @Post("dispatches")
   @RequirePermissions("dispatch.create")
   dispatch(@CurrentUser() u: AuthUser, @Body() d: CreateDispatchDto) {
     return this.s.createDispatch(u, d);
   }
-  @ApiEndpoint("Ghi sổ phiếu xuất/giao hàng", { audience: "both" })
+  @ApiEndpoint("Ghi sổ phiếu xuất/giao hàng", { audience: "mobile" })
   @Post("dispatches/:id/post")
   @RequirePermissions("dispatch.post")
   postD(
@@ -93,13 +93,13 @@ export class DeliveryController {
   ) {
     return this.s.postDispatch(u, id, d, k);
   }
-  @ApiEndpoint("Tạo phiếu nhận hàng", { audience: "both" })
+  @ApiEndpoint("Tạo phiếu nhận hàng", { audience: "mobile" })
   @Post("receipts")
   @RequirePermissions("receipt.create")
   receipt(@CurrentUser() u: AuthUser, @Body() d: CreateReceiptDto) {
     return this.s.createReceipt(u, d);
   }
-  @ApiEndpoint("Ghi sổ phiếu nhận hàng", { audience: "both" })
+  @ApiEndpoint("Ghi sổ phiếu nhận hàng", { audience: "mobile" })
   @Post("receipts/:id/post")
   @RequirePermissions("receipt.post")
   postR(

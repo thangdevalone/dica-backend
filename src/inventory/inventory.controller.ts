@@ -22,20 +22,20 @@ import { InventoryService } from "./inventory.service.js";
 @Controller()
 export class InventoryController {
   constructor(private s: InventoryService) {}
-  @ApiEndpoint("Xem số dư tồn kho hiện tại", { audience: "both" })
+  @ApiEndpoint("Xem số dư tồn kho hiện tại", { audience: "mobile" })
   @Get("stock-balances")
   @RequirePermissions("stock.read")
   balances(@CurrentUser() u: AuthUser, @Query() q: InventoryListQueryDto) {
     return this.s.balances(u, q);
   }
-  @ApiEndpoint("Xem lịch sử bút toán nhập xuất tồn", { audience: "both" })
+  @ApiEndpoint("Xem lịch sử bút toán nhập xuất tồn", { audience: "mobile" })
   @Get("stock-ledger")
   @RequirePermissions("stock_ledger.read")
   ledger(@CurrentUser() u: AuthUser, @Query() q: LedgerListQueryDto) {
     return this.s.ledger(u, q);
   }
   @Get("notifications")
-  @ApiEndpoint("Xem danh sách thông báo của tài khoản", { audience: "both" })
+  @ApiEndpoint("Xem danh sách thông báo của tài khoản", { audience: "mobile" })
   @RequirePermissions("notification.read_own")
   notifications(
     @CurrentUser() u: AuthUser,
@@ -46,7 +46,7 @@ export class InventoryController {
 
   @Post("notifications/read-all")
   @ApiEndpoint("Đánh dấu toàn bộ thông báo là đã đọc", {
-    audience: "both",
+    audience: "mobile",
     emptyBody: true,
   })
   @RequirePermissions("notification.mark_own")
@@ -55,7 +55,7 @@ export class InventoryController {
   }
 
   @Get("notifications/:id")
-  @ApiEndpoint("Xem chi tiết một thông báo", { audience: "both" })
+  @ApiEndpoint("Xem chi tiết một thông báo", { audience: "mobile" })
   @RequirePermissions("notification.read_own")
   notification(
     @CurrentUser() u: AuthUser,
@@ -66,7 +66,7 @@ export class InventoryController {
 
   @Post("notifications/:id/read")
   @ApiEndpoint("Đánh dấu một thông báo là đã đọc", {
-    audience: "both",
+    audience: "mobile",
     emptyBody: true,
   })
   @RequirePermissions("notification.mark_own")

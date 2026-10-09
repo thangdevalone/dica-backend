@@ -9,6 +9,7 @@ import {
   paginateById,
 } from "../common/pagination/pagination.js";
 import { assertPositiveDecimal } from "../common/utils/decimal.js";
+import { notifyPermission } from "../common/utils/notify.js";
 import { PrismaService } from "../database/prisma.service.js";
 import {
   Prisma,
@@ -44,6 +45,79 @@ export class IposService {
       },
       message:
         "Chưa tích hợp API iPOS thật; hiện dùng contract import thủ công cho demo.",
+    };
+  }
+
+  async cancelSale(
+    user: AuthUser,
+    id: string,
+    reason: string,
+    rawKey?: string,
+  ) {
+    const result = await this.idempotency.execute(
+      user,
+      `sale.cancel:${id}`,
+      this.idempotency.requireKey(rawKey),
+      { reason },
+      async (tx) => {
+        const record = await tx.salesRecord.findFirst({
+          where: { id, organizationId: user.organizationId },
+          include: { batch: true },
+        });
+        if (!record) this.notFound("dữ liệu bán hàng");
+        this.scope.assertAccess(user, "sales_import.commit", {
+          facilityId: record.batch.facilityId,
+        });
+        if (record.cancelledAt) return { sales_record_id: id, cancelled: true };
+        await tx.salesRecord.update({
+          where: { id },
+          data: { cancelledAt: new Date(), cancellationReason: reason },
+        });
+        await tx.varianceResult.updateMany({
+          where: {
+            organizationId: user.organizationId,
+            stockLocation: { facilityId: record.batch.facilityId },
+            stocktake: { cutoffAt: { gte: record.soldAt } },
+          },
+          data: {
+            dataStatus: "DATA_INCOMPLETE",
+            missingData: {
+              reason: "SALES_RECORD_CANCELLED",
+              sales_record_id: id,
+            },
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            organizationId: user.organizationId,
+            actorId: user.id,
+            action: "sales_record.cancel",
+            resourceType: "SalesRecord",
+            resourceId: id,
+            requestId: user.requestId,
+            afterData: {
+              external_key: record.externalKey,
+              reason,
+              original_quantity: record.quantity.toString(),
+            },
+          },
+        });
+        await notifyPermission(
+          tx,
+          user.organizationId,
+          "variance.read",
+          { facilityId: record.batch.facilityId },
+          "Dữ liệu hóa đơn đã bị hủy",
+          `Bản ghi ${record.externalKey} đã hủy: ${reason}. Cần tính lại báo cáo tiêu hao liên quan.`,
+          "SalesRecord",
+          id,
+        );
+        return { sales_record_id: id, cancelled: true };
+      },
+    );
+    return {
+      data: result.value,
+      message: "Đã lưu lịch sử hủy và gửi thông báo.",
     };
   }
 
@@ -592,6 +666,7 @@ export class IposService {
       );
     const sales = await this.db.salesRecord.findMany({
       where: {
+        cancelledAt: null,
         organizationId: user.organizationId,
         soldAt: { gt: startAt, lte: stocktake.cutoffAt },
         batch: { status: SalesImportStatus.COMMITTED },

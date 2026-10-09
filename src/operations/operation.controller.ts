@@ -34,7 +34,7 @@ export class OperationController {
   constructor(private readonly service: OperationService) {}
 
   @Get("inventory-adjustments")
-  @ApiEndpoint("Xem danh sách phiếu điều chỉnh tồn kho", { adminWeb: true })
+  @ApiEndpoint("Xem danh sách phiếu điều chỉnh tồn kho", { mobile: true })
   @RequirePermissions("adjustment.read")
   adjustments(
     @CurrentUser() user: AuthUser,
@@ -44,7 +44,7 @@ export class OperationController {
   }
 
   @Post("inventory-adjustments")
-  @ApiEndpoint("Tạo phiếu điều chỉnh tồn kho", { adminWeb: true })
+  @ApiEndpoint("Tạo phiếu điều chỉnh tồn kho", { mobile: true })
   @RequirePermissions("adjustment.create")
   createAdjustment(
     @CurrentUser() user: AuthUser,
@@ -54,7 +54,7 @@ export class OperationController {
   }
 
   @Post("inventory-adjustments/:id/approve")
-  @ApiEndpoint("Duyệt phiếu điều chỉnh tồn kho", { adminWeb: true })
+  @ApiEndpoint("Duyệt phiếu điều chỉnh tồn kho", { mobile: true })
   @RequirePermissions("adjustment.approve")
   approveAdjustment(
     @CurrentUser() user: AuthUser,
@@ -65,7 +65,7 @@ export class OperationController {
   }
 
   @Post("inventory-adjustments/:id/post")
-  @ApiEndpoint("Ghi sổ phiếu điều chỉnh vào tồn kho", { adminWeb: true })
+  @ApiEndpoint("Ghi sổ phiếu điều chỉnh vào tồn kho", { mobile: true })
   @RequirePermissions("adjustment.post")
   postAdjustment(
     @CurrentUser() user: AuthUser,
@@ -77,7 +77,7 @@ export class OperationController {
   }
 
   @Get("stocktakes")
-  @ApiEndpoint("Xem danh sách phiếu kiểm kê", { audience: "both" })
+  @ApiEndpoint("Xem danh sách phiếu kiểm kê", { audience: "mobile" })
   @RequirePermissions("stocktake.read")
   stocktakes(
     @CurrentUser() user: AuthUser,
@@ -121,7 +121,7 @@ export class OperationController {
   }
 
   @Post("stocktakes/:id/reopen")
-  @ApiEndpoint("Mở lại phiếu kiểm kê", { audience: "admin-web" })
+  @ApiEndpoint("Mở lại phiếu kiểm kê", { audience: "mobile" })
   @RequirePermissions("stocktake.reopen")
   reopenStocktake(
     @CurrentUser() user: AuthUser,
@@ -132,14 +132,14 @@ export class OperationController {
   }
 
   @Get("damage-reports")
-  @ApiEndpoint("Xem danh sách phiếu báo hỏng", { audience: "both" })
+  @ApiEndpoint("Xem danh sách phiếu báo hỏng", { audience: "mobile" })
   @RequirePermissions("damage.read")
   damages(@CurrentUser() user: AuthUser, @Query() query: DamageListQueryDto) {
     return this.service.damages(user, query);
   }
 
   @Post("damage-reports")
-  @ApiEndpoint("Tạo phiếu báo hỏng", { audience: "both" })
+  @ApiEndpoint("Tạo phiếu báo hỏng", { audience: "mobile" })
   @RequirePermissions("damage.create")
   createDamage(@CurrentUser() user: AuthUser, @Body() dto: CreateDamageDto) {
     return this.service.createDamage(user, dto);
@@ -159,7 +159,7 @@ export class OperationController {
   }
 
   @Post("damage-reports/:id/submit")
-  @ApiEndpoint("Gửi phiếu báo hỏng để xác nhận", { audience: "both" })
+  @ApiEndpoint("Gửi phiếu báo hỏng để xác nhận", { audience: "mobile" })
   @RequirePermissions("damage.submit")
   submitDamage(
     @CurrentUser() user: AuthUser,
@@ -170,7 +170,7 @@ export class OperationController {
   }
 
   @Post("damage-reports/:id/confirm")
-  @ApiEndpoint("Xác nhận và ghi nhận hao hụt do hỏng", { adminWeb: true })
+  @ApiEndpoint("Xác nhận và ghi nhận hao hụt do hỏng", { mobile: true })
   @RequirePermissions("damage.confirm")
   confirmDamage(
     @CurrentUser() user: AuthUser,

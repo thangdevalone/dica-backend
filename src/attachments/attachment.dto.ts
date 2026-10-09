@@ -19,9 +19,9 @@ export const ATTACHMENT_CONTENT_TYPES = [
 ] as const;
 
 export class AttachmentResourceDto {
-  @ApiProperty({ enum: ["RECEIPT", "DAMAGE_REPORT"] })
-  @IsIn(["RECEIPT", "DAMAGE_REPORT"])
-  resource_type!: "RECEIPT" | "DAMAGE_REPORT";
+  @ApiProperty({ enum: ["RECEIPT", "DAMAGE_REPORT", "RETURN"] })
+  @IsIn(["RECEIPT", "DAMAGE_REPORT", "RETURN"])
+  resource_type!: "RECEIPT" | "DAMAGE_REPORT" | "RETURN";
 
   @ApiProperty({ format: "uuid" })
   @IsUUID()

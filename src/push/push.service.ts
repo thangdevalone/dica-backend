@@ -4,6 +4,7 @@ import { createSign } from "node:crypto";
 import type { AuthUser } from "../auth/auth.types.js";
 import { PrismaService } from "../database/prisma.service.js";
 import type { Notification } from "../generated/prisma/client.js";
+import { InventoryService } from "../inventory/inventory.service.js";
 import type {
   RegisterPushDeviceDto,
   UnregisterPushDeviceDto,
@@ -22,6 +23,7 @@ export class PushService {
   constructor(
     private readonly db: PrismaService,
     private readonly config: ConfigService,
+    private readonly inventory: InventoryService,
   ) {}
 
   async devices(user: AuthUser) {
@@ -110,7 +112,32 @@ export class PushService {
         userId: true,
         token: true,
         platform: true,
-        user: { select: { kind: true } },
+        user: {
+          select: {
+            id: true,
+            organizationId: true,
+            supplierId: true,
+            kind: true,
+            username: true,
+            displayName: true,
+            grants: {
+              where: { revokedAt: null, role: { active: true } },
+              select: {
+                id: true,
+                scopeType: true,
+                facilityId: true,
+                stockLocationId: true,
+                departmentId: true,
+                role: {
+                  select: {
+                    code: true,
+                    permissions: { select: { permissionCode: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!devices.length) return;
@@ -119,6 +146,38 @@ export class PushService {
       const items = byUser.get(notification.userId) ?? [];
       items.push(notification);
       byUser.set(notification.userId, items);
+    }
+    const checkedUsers = new Set<string>();
+    for (const device of devices) {
+      if (checkedUsers.has(device.userId)) continue;
+      checkedUsers.add(device.userId);
+      const candidate = byUser.get(device.userId) ?? [];
+      const user: AuthUser = {
+        ...device.user,
+        sessionId: "push",
+        requestId: "push",
+        grants: device.user.grants.map((grant) => ({
+          id: grant.id,
+          scopeType: grant.scopeType,
+          facilityId: grant.facilityId,
+          stockLocationId: grant.stockLocationId,
+          departmentId: grant.departmentId,
+          roleCode: grant.role.code,
+          permissions: grant.role.permissions.map(
+            (permission) => permission.permissionCode,
+          ),
+        })),
+      };
+      const allowed = new Set(
+        await this.inventory.readableNotificationIds(
+          user,
+          candidate.map((row) => row.id),
+        ),
+      );
+      byUser.set(
+        device.userId,
+        candidate.filter((row) => allowed.has(row.id)),
+      );
     }
     let sent = 0;
     let failed = 0;
@@ -176,6 +235,8 @@ export class PushService {
               resource_type: notification.resourceType,
               resource_id: notification.resourceId,
               route: this.route(notification, supplierUser),
+              reminder_interval_seconds: "3600",
+              stop_on_read: "true",
             },
             ...(platform === "IOS"
               ? {
@@ -229,6 +290,7 @@ export class PushService {
       DamageReport: `/damage-reports/${notification.resourceId}`,
       DiscrepancyCase: `/discrepancies/${notification.resourceId}`,
       Stocktake: `/stocktakes/${notification.resourceId}`,
+      ReturnDocument: `/returns/${notification.resourceId}`,
     };
     return routes[notification.resourceType] ?? "/notifications";
   }

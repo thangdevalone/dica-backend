@@ -41,6 +41,7 @@ function createFixture(options?: { prefix?: Buffer; contentLength?: number }) {
       }),
     },
     attachment: {
+      count: async () => (record ? 1 : 0),
       create: async ({ data }: { data: Record<string, unknown> }) => {
         record = { ...data, createdAt: new Date() };
         return record;
@@ -56,13 +57,16 @@ function createFixture(options?: { prefix?: Buffer; contentLength?: number }) {
       },
     },
   } as unknown as PrismaService;
+  database.$transaction = (async (
+    fn: (tx: PrismaService) => Promise<unknown>,
+  ) => fn(database)) as typeof database.$transaction;
   const scope = { assertAccess: () => undefined } as unknown as ScopeService;
   const storage = {
     createUploadUrl: async () => ({
       url: "https://r2.example/presigned",
       expiresAt: new Date(Date.now() + 600_000),
     }),
-    publicUrl: (key: string) => `https://assets.example.com/${key}`,
+
     head: async () => ({
       contentLength: options?.contentLength ?? dto.size_bytes,
       contentType: dto.content_type,
@@ -127,16 +131,16 @@ test("finalize kiểm tra object R2 rồi chuyển attachment sang READY", async
   assert.deepEqual(fixture.deleted, []);
 });
 
-test("finalize trả URL public sau khi kiểm tra attachment READY", async () => {
+test("finalize trả đường dẫn nội dung yêu cầu xác thực", async () => {
   const fixture = createFixture();
   const initialized = await fixture.service.createUpload(user, dto);
   const id = initialized.data.attachment.id as string;
   const result = await fixture.service.finalizeUpload(user, id);
 
-  assert.match(result.data.viewUrl!, /^https:\/\/assets\.example\.com\//);
+  assert.match(result.data.viewUrl!, /^\/api\/v1\/attachments\/.*\/content$/);
 });
 
-test("danh sách attachment trả URL public cố định", async () => {
+test("danh sách attachment không trả URL R2 public", async () => {
   const fixture = createFixture();
   const initialized = await fixture.service.createUpload(user, dto);
   await fixture.service.finalizeUpload(
@@ -147,27 +151,10 @@ test("danh sách attachment trả URL public cố định", async () => {
 
   assert.match(
     result.data[0]?.viewUrl ?? "",
-    /^https:\/\/assets\.example\.com\//,
+    /^\/api\/v1\/attachments\/.*\/content$/,
   );
   assert.equal("viewUrlExpiresAt" in result.data[0]!, false);
   assert.equal("objectKey" in result.data[0]!, false);
-});
-
-test("URL public mã hóa từng segment của object key", () => {
-  const storage = new R2StorageService(
-    new ConfigService({
-      R2_ACCOUNT_ID: "account-id",
-      R2_ACCESS_KEY_ID: "access-key-id",
-      R2_SECRET_ACCESS_KEY: "secret-access-key",
-      R2_BUCKET: "dica-attachments",
-      R2_PUBLIC_BASE_URL: "https://assets.example.com/",
-    }),
-  );
-
-  assert.equal(
-    storage.publicUrl("attachments/org/file name.jpg"),
-    "https://assets.example.com/attachments/org/file%20name.jpg",
-  );
 });
 
 test("finalize xóa file giả ảnh khỏi R2", async () => {

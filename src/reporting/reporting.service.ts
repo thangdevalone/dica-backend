@@ -1,3 +1,5 @@
+import { paymentValue, paymentStatus } from "../common/utils/payment.js";
+import { notifyPermission } from "../common/utils/notify.js";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth.types.js";
 import { ScopeService } from "../auth/scope.service.js";
@@ -25,14 +27,28 @@ export class ReportingService {
     const tracking = await this.db.paymentTracking.findUnique({
       where: { orderId },
     });
+    const organization = await this.db.organization.findUniqueOrThrow({
+      where: { id: user.organizationId },
+      select: { paymentApprovalRequired: true },
+    });
     return {
       data: {
         orderId: order.id,
         orderCode: order.code,
+        facilityId: order.destinationStockLocation.facilityId,
+        stockLocationId: order.destinationStockLocationId,
         reconciledValue: reconciledValue.toFixed(4),
         paidValue: tracking?.paidValue.toFixed(4) ?? "0.0000",
-        status: tracking?.status ?? PaymentStatus.UNPAID,
+        status: paymentStatus(
+          tracking?.paidValue ?? new Prisma.Decimal(0),
+          reconciledValue,
+        ),
         version: tracking?.version ?? 0,
+        pendingPaidValue: tracking?.pendingPaidValue?.toFixed(4) ?? null,
+        paymentDueAt: order.paymentDueAt,
+        paymentApprovalRequired: organization.paymentApprovalRequired,
+        updatedById: tracking?.updatedById ?? null,
+        confirmedById: tracking?.confirmedById ?? null,
       },
       message: "Lấy thông tin đối soát thanh toán thành công.",
     };
@@ -63,8 +79,18 @@ export class ReportingService {
         if (!order) this.notFound();
         this.assertOrderScope(user, "payment_tracking.update", order);
         const reconciledValue = this.reconciledValue(order.lines);
-        const paidValue = new Prisma.Decimal(dto.paid_value);
-        if (paidValue.gt(reconciledValue))
+        const requestedPaidValue = new Prisma.Decimal(dto.paid_value);
+        const organization = await tx.organization.findUniqueOrThrow({
+          where: { id: user.organizationId },
+        });
+        const previous = await tx.paymentTracking.findUnique({
+          where: { orderId },
+        });
+        const needsApproval = organization.paymentApprovalRequired;
+        const paidValue = needsApproval
+          ? (previous?.paidValue ?? new Prisma.Decimal(0))
+          : requestedPaidValue;
+        if (requestedPaidValue.gt(reconciledValue))
           throw new ApiException(
             ErrorCode.VALIDATION_ERROR,
             "Số tiền đã ghi nhận không được vượt giá trị đối soát.",
@@ -91,12 +117,16 @@ export class ReportingService {
             orderId,
             reconciledValue,
             paidValue,
+            pendingPaidValue: needsApproval ? requestedPaidValue : null,
+            confirmedById: needsApproval ? null : user.id,
             status,
             updatedById: user.id,
           },
           update: {
             reconciledValue,
             paidValue,
+            pendingPaidValue: needsApproval ? requestedPaidValue : null,
+            confirmedById: needsApproval ? null : user.id,
             status,
             updatedById: user.id,
             version: { increment: 1 },
@@ -121,15 +151,39 @@ export class ReportingService {
               : {}),
             afterData: {
               paid_value: tracking.paidValue.toString(),
+              pending_paid_value: tracking.pendingPaidValue?.toString() ?? null,
+              payment_approval_required: needsApproval,
               status: tracking.status,
               version: tracking.version,
             },
           },
         });
+        if (needsApproval)
+          await notifyPermission(
+            tx,
+            user.organizationId,
+            "payment_tracking.confirm",
+            {
+              facilityId: order.destinationStockLocation.facilityId,
+              stockLocationId: order.destinationStockLocationId,
+            },
+            "Thanh toán chờ xác nhận",
+            `Khoản thanh toán của đơn ${order.code} cần một người khác xác nhận.`,
+            "FulfillmentOrder",
+            orderId,
+            [user.id],
+          );
         return {
           orderId,
           orderCode: order.code,
+          facilityId: order.destinationStockLocation.facilityId,
+          stockLocationId: order.destinationStockLocationId,
+          paymentApprovalRequired: needsApproval,
+          updatedById: tracking.updatedById,
+          confirmedById: tracking.confirmedById,
+          paymentDueAt: order.paymentDueAt?.toISOString() ?? null,
           reconciledValue: tracking.reconciledValue.toString(),
+          pendingPaidValue: tracking.pendingPaidValue?.toString() ?? null,
           paidValue: tracking.paidValue.toString(),
           status: tracking.status,
           version: tracking.version,
@@ -140,7 +194,9 @@ export class ReportingService {
       data: result.value,
       message: result.replayed
         ? "Khoản thanh toán đã được ghi nhận trước đó; trả lại kết quả cũ."
-        : "Cập nhật đối soát thanh toán thành công.",
+        : result.value.pendingPaidValue !== null
+          ? "Đã lưu khoản thanh toán chờ người khác xác nhận."
+          : "Cập nhật đối soát thanh toán thành công.",
     };
   }
 
@@ -273,39 +329,55 @@ export class ReportingService {
 
   async paymentReport(user: AuthUser, query: ReportQueryDto) {
     this.assertInternal(user);
-    const where: Prisma.PaymentTrackingWhereInput = {
-      order: {
-        organizationId: user.organizationId,
-        destinationStockLocation: {
-          ...this.stockLocationScope(user, "report.payment"),
-          ...this.facilityFilter(query),
-        },
+    const where: Prisma.FulfillmentOrderWhereInput = {
+      organizationId: user.organizationId,
+      sourceType: "SUPPLIER",
+      status: { not: "CANCELLED" },
+      destinationStockLocation: {
+        ...this.stockLocationScope(user, "report.payment"),
+        ...this.facilityFilter(query),
       },
     };
-    const { data, meta } = await paginateById(
+    const result = await paginateById(
       query,
       ({ skip, take, cursorId }) =>
-        this.db.paymentTracking.findMany({
+        this.db.fulfillmentOrder.findMany({
           where,
-          include: {
-            order: {
-              include: {
-                supplier: true,
-                destinationStockLocation: { include: { facility: true } },
-              },
-            },
-          },
-          orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-          ...(skip !== undefined ? { skip } : {}),
           take,
+          ...(skip !== undefined ? { skip } : {}),
           ...(cursorId ? { cursor: { id: cursorId } } : {}),
+          include: {
+            supplier: true,
+            destinationStockLocation: { include: { facility: true } },
+            lines: true,
+            paymentTracking: true,
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         }),
-      () => this.db.paymentTracking.count({ where }),
+      () => this.db.fulfillmentOrder.count({ where }),
     );
     return {
-      data,
+      ...result,
+      data: result.data.map((order) => {
+        const value = paymentValue(order.lines);
+        const tracking = order.paymentTracking;
+        const paid = tracking?.paidValue ?? new Prisma.Decimal(0);
+        return {
+          id: tracking?.id ?? order.id,
+          orderId: order.id,
+          reconciledValue: value,
+          paidValue: paid,
+          pendingPaidValue: tracking?.pendingPaidValue ?? null,
+          status:
+            value === null ? PaymentStatus.UNPAID : paymentStatus(paid, value),
+          version: tracking?.version ?? 0,
+          updatedAt: tracking?.updatedAt ?? order.updatedAt,
+          paymentDueAt: order.paymentDueAt,
+          dataIncomplete: value === null,
+          order,
+        };
+      }),
       message: "Lấy báo cáo thanh toán thành công.",
-      meta,
     };
   }
 
@@ -376,6 +448,7 @@ export class ReportingService {
     lines: Array<{
       receivedQuantity: Prisma.Decimal;
       acceptedExcessQuantity: Prisma.Decimal;
+      returnedQuantity?: Prisma.Decimal;
       unitPriceSnapshot: Prisma.Decimal | null;
     }>,
   ) {
@@ -385,15 +458,7 @@ export class ReportingService {
         "Đơn có dòng chưa có đơn giá snapshot nên chưa thể đối soát.",
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
-    return lines.reduce(
-      (sum, line) =>
-        sum.add(
-          line.receivedQuantity
-            .add(line.acceptedExcessQuantity)
-            .mul(line.unitPriceSnapshot!),
-        ),
-      new Prisma.Decimal(0),
-    );
+    return paymentValue(lines)!;
   }
 
   private assertInternal(user: AuthUser) {

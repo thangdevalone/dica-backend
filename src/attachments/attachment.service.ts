@@ -5,6 +5,7 @@ import type { AuthUser } from "../auth/auth.types.js";
 import { ScopeService } from "../auth/scope.service.js";
 import { ApiException } from "../common/errors/api.exception.js";
 import { ErrorCode } from "../common/errors/error-codes.js";
+import { Prisma } from "../generated/prisma/client.js";
 import { PrismaService } from "../database/prisma.service.js";
 import {
   ATTACHMENT_CONTENT_TYPES,
@@ -56,7 +57,7 @@ export class AttachmentService {
     });
     const data = attachments.map(({ objectKey, ...attachment }) => ({
       ...attachment,
-      viewUrl: objectKey ? this.storage.publicUrl(objectKey) : null,
+      viewUrl: `/api/v1/attachments/${attachment.id}/content`,
     }));
     return { data, message: "Lấy danh sách ảnh đính kèm thành công." };
   }
@@ -84,30 +85,52 @@ export class AttachmentService {
       dto.size_bytes,
     );
 
-    const attachment = await this.db.attachment.create({
-      data: {
-        id,
-        organizationId: user.organizationId,
-        uploadedById: user.id,
-        resourceType: dto.resource_type,
-        resourceId: dto.resource_id,
-        fileName: dto.file_name.trim().slice(0, 255),
-        mimeType: dto.content_type,
-        sizeBytes: dto.size_bytes,
-        objectKey,
-        uploadStatus: "PENDING",
-        uploadExpiresAt: signed.expiresAt,
+    const attachment = await this.db.$transaction(
+      async (tx) => {
+        const count = await tx.attachment.count({
+          where: {
+            organizationId: user.organizationId,
+            resourceType: dto.resource_type,
+            resourceId: dto.resource_id,
+            OR: [
+              { uploadStatus: "READY" },
+              { uploadStatus: "PENDING", uploadExpiresAt: { gt: new Date() } },
+            ],
+          },
+        });
+        if (count >= 10)
+          throw new ApiException(
+            ErrorCode.VALIDATION_ERROR,
+            "Mỗi phiếu chỉ được tối đa 10 ảnh.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+          );
+        return tx.attachment.create({
+          data: {
+            id,
+            organizationId: user.organizationId,
+            uploadedById: user.id,
+            resourceType: dto.resource_type,
+            resourceId: dto.resource_id,
+            fileName: dto.file_name.trim().slice(0, 255),
+            mimeType: dto.content_type,
+            sizeBytes: dto.size_bytes,
+            objectKey,
+            uploadStatus: "PENDING",
+            uploadExpiresAt: signed.expiresAt,
+          },
+          select: {
+            id: true,
+            resourceType: true,
+            resourceId: true,
+            fileName: true,
+            mimeType: true,
+            sizeBytes: true,
+            createdAt: true,
+          },
+        });
       },
-      select: {
-        id: true,
-        resourceType: true,
-        resourceId: true,
-        fileName: true,
-        mimeType: true,
-        sizeBytes: true,
-        createdAt: true,
-      },
-    });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
 
     return {
       data: {
@@ -131,7 +154,8 @@ export class AttachmentService {
     });
     if (!attachment) this.notFound();
     await this.authorize(user, {
-      resource_type: attachment.resourceType as "RECEIPT" | "DAMAGE_REPORT",
+      resource_type: attachment.resourceType as
+        "RECEIPT" | "DAMAGE_REPORT" | "RETURN",
       resource_id: attachment.resourceId,
     });
     if (attachment.uploadStatus === "READY")
@@ -188,10 +212,34 @@ export class AttachmentService {
       );
     }
 
-    await this.db.attachment.updateMany({
-      where: { id: attachment.id, uploadStatus: "PENDING" },
-      data: { uploadStatus: "READY", uploadExpiresAt: null },
-    });
+    await this.db.$transaction(
+      async (tx) => {
+        const current = await tx.attachment.findFirst({
+          where: { id: attachment.id },
+        });
+        if (!current) this.notFound();
+        if (current.uploadStatus === "READY") return;
+        const count = await tx.attachment.count({
+          where: {
+            organizationId: user.organizationId,
+            resourceType: attachment.resourceType,
+            resourceId: attachment.resourceId,
+            uploadStatus: "READY",
+          },
+        });
+        if (count >= 10)
+          throw new ApiException(
+            ErrorCode.VALIDATION_ERROR,
+            "Mỗi phiếu chỉ được tối đa 10 ảnh.",
+            HttpStatus.UNPROCESSABLE_ENTITY,
+          );
+        await tx.attachment.updateMany({
+          where: { id: attachment.id, uploadStatus: "PENDING" },
+          data: { uploadStatus: "READY", uploadExpiresAt: null },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     return {
       data: this.metadata(attachment),
       message: "Hoàn tất tải ảnh lên R2 thành công.",
@@ -208,7 +256,8 @@ export class AttachmentService {
     });
     if (!attachment) this.notFound();
     await this.authorize(user, {
-      resource_type: attachment.resourceType as "RECEIPT" | "DAMAGE_REPORT",
+      resource_type: attachment.resourceType as
+        "RECEIPT" | "DAMAGE_REPORT" | "RETURN",
       resource_id: attachment.resourceId,
     });
 
@@ -266,9 +315,7 @@ export class AttachmentService {
       mimeType: attachment.mimeType,
       sizeBytes: attachment.sizeBytes,
       createdAt: attachment.createdAt,
-      viewUrl: attachment.objectKey
-        ? this.storage.publicUrl(attachment.objectKey)
-        : null,
+      viewUrl: `/api/v1/attachments/${attachment.id}/content`,
     };
   }
 
@@ -285,6 +332,22 @@ export class AttachmentService {
       this.scope.assertAccess(user, "attachment.upload", {
         facilityId: receipt.order.destinationStockLocation.facilityId,
         stockLocationId: receipt.order.destinationStockLocationId,
+      });
+      return;
+    }
+    if (resource.resource_type === "RETURN") {
+      const document = await this.db.returnDocument.findFirst({
+        where: {
+          id: resource.resource_id,
+          order: { organizationId: user.organizationId },
+        },
+        include: { order: { include: { destinationStockLocation: true } } },
+      });
+      if (!document) this.notFound();
+      this.scope.assertAccess(user, "attachment.upload", {
+        facilityId: document.order.destinationStockLocation.facilityId,
+        stockLocationId: document.order.destinationStockLocationId,
+        createdById: document.createdById,
       });
       return;
     }

@@ -18,7 +18,6 @@ export class R2StorageService {
   private readonly bucket: string;
   private readonly client: S3Client;
   private readonly uploadUrlTtlSeconds: number;
-  private readonly publicBaseUrl: string;
 
   constructor(config: ConfigService) {
     const accountId = config.getOrThrow<string>("R2_ACCOUNT_ID");
@@ -27,9 +26,6 @@ export class R2StorageService {
       "R2_UPLOAD_URL_TTL_SECONDS",
       600,
     );
-    this.publicBaseUrl = config
-      .getOrThrow<string>("R2_PUBLIC_BASE_URL")
-      .replace(/\/+$/, "");
     this.client = new S3Client({
       region: "auto",
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
@@ -40,14 +36,6 @@ export class R2StorageService {
       requestChecksumCalculation: "WHEN_REQUIRED",
       responseChecksumValidation: "WHEN_REQUIRED",
     });
-  }
-
-  publicUrl(key: string) {
-    const encodedKey = key
-      .split("/")
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-    return `${this.publicBaseUrl}/${encodedKey}`;
   }
 
   async createUploadUrl(

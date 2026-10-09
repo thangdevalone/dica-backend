@@ -12,14 +12,15 @@ Backend NestJS dạng modular monolith cho web quản trị và ứng dụng DIC
 - Yêu cầu hàng: draft, submit, duyệt/từ chối; snapshot nguồn/quy đổi; tự tách đơn theo nguồn.
 - Projection riêng cho nhà cung ứng; không lộ request, tồn kho, audit hoặc payment nội bộ.
 - Xuất/nhận từng phần, giao bù; ledger bất biến, balance cache, transaction, idempotency, audit và outbox.
-- Điều chuyển nội bộ; kiểm kê snapshot; báo hỏng; điều chỉnh tồn có duyệt/post và chặn tồn âm.
+- Điều chuyển theo tuyến được phép và khoảng giờ nhận; kiểm kê snapshot; báo hỏng ghi giảm một lần; điều chỉnh tồn có duyệt/post; cho phép tồn vật lý âm.
+- Chốt thiếu và hoàn hàng lúc 00:00 theo giờ Việt Nam; đối soát theo lượng thực giữ lại; cấu hình giá chuẩn, lưu ảnh riêng tư 6–12 tháng và xác nhận thanh toán hai người.
 - Import bán hàng thủ công, mapping món, định mức version và tính hao hụt có kiểm tra dữ liệu thiếu.
 - Báo cáo tồn/đơn/hao hụt/hỏng/payment; thông báo kiểm tra lại quyền; health live/ready; migration và seed demo.
 - Logger Pino có request ID, log JSON ở production, log dễ đọc khi development và tự che dữ liệu nhạy cảm.
 - Mọi thay đổi cấu hình admin hiện có đều ghi lịch sử tập trung, gồm người thao tác, request, dữ liệu vào/kết quả và thời gian.
 - Mọi API danh sách đều phân trang mặc định; hỗ trợ offset đầy đủ metadata và cursor không `COUNT(*)` cho dữ liệu lớn.
 
-Nguồn nghiệp vụ chính là [flow.md](flow.md). Kết quả đối chiếu code, phần còn thiếu và câu hỏi cần chốt với khách nằm tại [TASK.md](TASK.md). Tài liệu bàn giao cho Mobile nằm tại [docs/mobile-integration.md](docs/mobile-integration.md).
+Quyết định nghiệp vụ hiện hành là [câu trả lời của khách ngày 08/10/2026](docs/customer-flow-questions-response.md); khi mâu thuẫn, ưu tiên quyết định này hơn `flow.md`/`new-flow.md` và các đánh giá cũ trong `TASK.md`. Tài liệu bàn giao cho Mobile nằm tại [docs/mobile-integration.md](docs/mobile-integration.md). Web dành cho cấu hình; nghiệp vụ vận hành và duyệt thực hiện trên mobile.
 
 Các tài liệu kỹ thuật còn lại được tách theo mục đích: [kiến trúc](docs/architecture.md), [quyết định](docs/decisions.md), [deploy VPS](docs/deployment-vps.md) và [vận hành](docs/operations.md). Swagger tại `/docs` là API contract thực thi.
 

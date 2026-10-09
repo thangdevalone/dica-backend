@@ -140,7 +140,7 @@ test("supplier preference and group eligibility expose concrete schemas", () => 
   });
 });
 
-test("supplier order projection does not expose price before policy is approved", () => {
+test("supplier order projection exposes its own price after customer confirmation", () => {
   const supplierOrder = DICA_RESPONSE_SCHEMAS.SupplierOrderProjection as {
     properties: {
       lines: { items: { properties: Record<string, unknown> } };
@@ -149,7 +149,7 @@ test("supplier order projection does not expose price before policy is approved"
 
   assert.equal(
     "unitPriceSnapshot" in supplierOrder.properties.lines.items.properties,
-    false,
+    true,
   );
 });
 

@@ -28,19 +28,19 @@ import { RequestService } from "./request.service.js";
 @Controller("requests")
 export class RequestController {
   constructor(private s: RequestService) {}
-  @ApiEndpoint("Xem danh sách yêu cầu hàng", { audience: "both" })
+  @ApiEndpoint("Xem danh sách yêu cầu hàng", { audience: "mobile" })
   @Get()
   @RequirePermissions("request.read")
   list(@CurrentUser() u: AuthUser, @Query() q: RequestListQueryDto) {
     return this.s.list(u, q);
   }
-  @ApiEndpoint("Xem chi tiết yêu cầu hàng", { audience: "both" })
+  @ApiEndpoint("Xem chi tiết yêu cầu hàng", { audience: "mobile" })
   @Get(":id")
   @RequirePermissions("request.read")
   detail(@CurrentUser() u: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.s.detail(u, id);
   }
-  @ApiEndpoint("Tạo yêu cầu hàng", { audience: "both" })
+  @ApiEndpoint("Tạo yêu cầu hàng", { audience: "mobile" })
   @Post()
   @RequirePermissions("request.create")
   create(@CurrentUser() u: AuthUser, @Body() d: CreateRequestDto) {
@@ -48,7 +48,7 @@ export class RequestController {
   }
   @Put(":id")
   @ApiEndpoint("Cập nhật yêu cầu hàng đang ở bản nháp", {
-    audience: "both",
+    audience: "mobile",
   })
   @RequirePermissions("request.update_draft")
   update(
@@ -59,8 +59,8 @@ export class RequestController {
     return this.s.updateDraft(u, id, d);
   }
   @Post(":id/revise")
-  @ApiEndpoint("Chỉnh sửa và tạo phiên bản mới của yêu cầu bị trả lại", {
-    audience: "both",
+  @ApiEndpoint("API cũ không còn hỗ trợ; tạo phiếu mới bằng POST /requests", {
+    audience: "mobile",
   })
   @RequirePermissions("request.revise")
   revise(
@@ -71,7 +71,7 @@ export class RequestController {
     return this.s.revise(u, id, d);
   }
   @Post(":id/cancel")
-  @ApiEndpoint("Hủy yêu cầu hàng", { audience: "both" })
+  @ApiEndpoint("Hủy yêu cầu hàng", { audience: "mobile" })
   @RequirePermissions("request.cancel")
   cancel(
     @CurrentUser() u: AuthUser,
@@ -81,7 +81,7 @@ export class RequestController {
     return this.s.cancel(u, id, d);
   }
   @Post(":id/refresh-routing")
-  @ApiEndpoint("Tính lại nguồn cấp cho yêu cầu hàng", { audience: "both" })
+  @ApiEndpoint("Tính lại nguồn cấp cho yêu cầu hàng", { audience: "mobile" })
   @RequirePermissions("request.update_draft")
   refreshRouting(
     @CurrentUser() u: AuthUser,
@@ -90,7 +90,7 @@ export class RequestController {
   ) {
     return this.s.refreshRouting(u, id, d);
   }
-  @ApiEndpoint("Gửi yêu cầu hàng để duyệt", { audience: "both" })
+  @ApiEndpoint("Gửi yêu cầu hàng để duyệt", { audience: "mobile" })
   @Post(":id/submit")
   @RequirePermissions("request.submit")
   submit(
@@ -101,7 +101,7 @@ export class RequestController {
     return this.s.submit(u, id, d);
   }
   @ApiEndpoint("Duyệt yêu cầu và sinh đơn thực hiện", {
-    audience: "admin-web",
+    audience: "mobile",
   })
   @Post(":id/approve")
   @RequirePermissions("request.approve")
@@ -113,7 +113,7 @@ export class RequestController {
   ) {
     return this.s.approve(u, id, d, k);
   }
-  @ApiEndpoint("Từ chối yêu cầu hàng", { audience: "admin-web" })
+  @ApiEndpoint("Từ chối yêu cầu hàng", { audience: "mobile" })
   @Post(":id/reject")
   @RequirePermissions("request.reject")
   reject(

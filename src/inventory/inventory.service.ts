@@ -178,109 +178,157 @@ export class InventoryService {
     const damageIds = idsFor("DamageReport");
     const discrepancyIds = idsFor("DiscrepancyCase");
     const stocktakeIds = idsFor("Stocktake");
+    const returnIds = idsFor("ReturnDocument");
+    const supplierIds = idsFor("Supplier");
+    const saleIds = idsFor("SalesRecord");
 
-    const [requests, orders, transfers, damages, discrepancies, stocktakes] =
-      await Promise.all([
-        requestIds.length
-          ? this.db.supplyRequest.findMany({
-              where: {
-                id: { in: requestIds },
-                organizationId: u.organizationId,
+    const [
+      requests,
+      orders,
+      transfers,
+      damages,
+      discrepancies,
+      stocktakes,
+      returns,
+      suppliers,
+      sales,
+    ] = await Promise.all([
+      requestIds.length
+        ? this.db.supplyRequest.findMany({
+            where: {
+              id: { in: requestIds },
+              organizationId: u.organizationId,
+            },
+            select: {
+              id: true,
+              facilityId: true,
+              departmentId: true,
+              createdById: true,
+            },
+          })
+        : [],
+      orderIds.length
+        ? this.db.fulfillmentOrder.findMany({
+            where: { id: { in: orderIds }, organizationId: u.organizationId },
+            select: {
+              id: true,
+              supplierId: true,
+              destinationStockLocationId: true,
+              destinationStockLocation: { select: { facilityId: true } },
+              sourceStockLocationId: true,
+              sourceStockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+      transferIds.length
+        ? this.db.transfer.findMany({
+            where: {
+              id: { in: transferIds },
+              organizationId: u.organizationId,
+            },
+            select: {
+              id: true,
+              fromStockLocationId: true,
+              fromStockLocation: { select: { facilityId: true } },
+              toStockLocationId: true,
+              toStockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+      damageIds.length
+        ? this.db.damageReport.findMany({
+            where: {
+              id: { in: damageIds },
+              stockLocation: {
+                facility: { organizationId: u.organizationId },
               },
-              select: {
-                id: true,
-                facilityId: true,
-                departmentId: true,
-                createdById: true,
+            },
+            select: {
+              id: true,
+              stockLocationId: true,
+              createdById: true,
+              stockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+      discrepancyIds.length
+        ? this.db.discrepancyCase.findMany({
+            where: {
+              id: { in: discrepancyIds },
+              receipt: {
+                order: { organizationId: u.organizationId },
               },
-            })
-          : [],
-        orderIds.length
-          ? this.db.fulfillmentOrder.findMany({
-              where: { id: { in: orderIds }, organizationId: u.organizationId },
-              select: {
-                id: true,
-                supplierId: true,
-                destinationStockLocationId: true,
-                destinationStockLocation: { select: { facilityId: true } },
-                sourceStockLocationId: true,
-                sourceStockLocation: { select: { facilityId: true } },
-              },
-            })
-          : [],
-        transferIds.length
-          ? this.db.transfer.findMany({
-              where: {
-                id: { in: transferIds },
-                organizationId: u.organizationId,
-              },
-              select: {
-                id: true,
-                fromStockLocationId: true,
-                fromStockLocation: { select: { facilityId: true } },
-                toStockLocationId: true,
-                toStockLocation: { select: { facilityId: true } },
-              },
-            })
-          : [],
-        damageIds.length
-          ? this.db.damageReport.findMany({
-              where: {
-                id: { in: damageIds },
-                stockLocation: {
-                  facility: { organizationId: u.organizationId },
-                },
-              },
-              select: {
-                id: true,
-                stockLocationId: true,
-                createdById: true,
-                stockLocation: { select: { facilityId: true } },
-              },
-            })
-          : [],
-        discrepancyIds.length
-          ? this.db.discrepancyCase.findMany({
-              where: {
-                id: { in: discrepancyIds },
-                receipt: {
-                  order: { organizationId: u.organizationId },
-                },
-              },
-              select: {
-                id: true,
-                receipt: {
-                  select: {
-                    order: {
-                      select: {
-                        destinationStockLocationId: true,
-                        destinationStockLocation: {
-                          select: { facilityId: true },
-                        },
+            },
+            select: {
+              id: true,
+              receipt: {
+                select: {
+                  order: {
+                    select: {
+                      destinationStockLocationId: true,
+                      destinationStockLocation: {
+                        select: { facilityId: true },
                       },
                     },
                   },
                 },
               },
-            })
-          : [],
-        stocktakeIds.length
-          ? this.db.stocktake.findMany({
-              where: {
-                id: { in: stocktakeIds },
-                stockLocation: {
-                  facility: { organizationId: u.organizationId },
+            },
+          })
+        : [],
+      stocktakeIds.length
+        ? this.db.stocktake.findMany({
+            where: {
+              id: { in: stocktakeIds },
+              stockLocation: {
+                facility: { organizationId: u.organizationId },
+              },
+            },
+            select: {
+              id: true,
+              stockLocationId: true,
+              createdById: true,
+              stockLocation: { select: { facilityId: true } },
+            },
+          })
+        : [],
+      returnIds.length
+        ? this.db.returnDocument.findMany({
+            where: {
+              id: { in: returnIds },
+              order: { organizationId: u.organizationId },
+            },
+            select: {
+              id: true,
+              createdById: true,
+              order: {
+                select: {
+                  destinationStockLocationId: true,
+                  destinationStockLocation: { select: { facilityId: true } },
                 },
               },
-              select: {
-                id: true,
-                stockLocationId: true,
-                createdById: true,
-                stockLocation: { select: { facilityId: true } },
-              },
-            })
-          : [],
-      ]);
+            },
+          })
+        : [],
+      supplierIds.length
+        ? this.db.supplier.findMany({
+            where: {
+              id: { in: supplierIds },
+              organizationId: u.organizationId,
+            },
+            select: { id: true },
+          })
+        : [],
+      saleIds.length
+        ? this.db.salesRecord.findMany({
+            where: { id: { in: saleIds }, organizationId: u.organizationId },
+            select: {
+              id: true,
+              batch: { select: { facilityId: true, createdById: true } },
+            },
+          })
+        : [],
+    ]);
 
     const allowed = new Set<string>();
     for (const resource of requests) {
@@ -360,11 +408,57 @@ export class InventoryService {
         allowed.add(`Stocktake:${resource.id}`);
     }
 
+    for (const resource of returns) {
+      if (
+        this.scope.canAccess(u, "return.read", {
+          facilityId: resource.order.destinationStockLocation.facilityId,
+          stockLocationId: resource.order.destinationStockLocationId,
+          createdById: resource.createdById,
+        })
+      )
+        allowed.add(`ReturnDocument:${resource.id}`);
+    }
+    for (const resource of suppliers) {
+      if (this.scope.canAccess(u, "price_alert.read", {}))
+        allowed.add(`Supplier:${resource.id}`);
+    }
+    for (const resource of sales) {
+      const context = {
+        facilityId: resource.batch.facilityId,
+        createdById: resource.batch.createdById,
+      };
+      if (
+        this.scope.canAccess(u, "sales_import.read", context) ||
+        this.scope.canAccess(u, "variance.read", context)
+      )
+        allowed.add(`SalesRecord:${resource.id}`);
+    }
+
     return notifications
-      .filter((notification) =>
-        allowed.has(`${notification.resourceType}:${notification.resourceId}`),
+      .filter(
+        (notification) =>
+          (u.kind !== "SUPPLIER" ||
+            notification.resourceType === "FulfillmentOrder") &&
+          allowed.has(
+            `${notification.resourceType}:${notification.resourceId}`,
+          ),
       )
       .map((notification) => notification.id);
+  }
+
+  async readableNotificationIds(u: AuthUser, ids: string[]) {
+    if (
+      !u.grants.some((grant) =>
+        grant.permissions.includes("notification.read_own"),
+      )
+    )
+      return [];
+    return this.authorizedNotificationIds(u, {
+      organizationId: u.organizationId,
+      userId: u.id,
+      status: "UNREAD",
+      id: { in: ids },
+    });
   }
 
   async notification(u: AuthUser, id: string) {
@@ -417,136 +511,13 @@ export class InventoryService {
     type: string,
     id: string,
   ) {
-    if (type === "SupplyRequest") {
-      const resource = await this.db.supplyRequest.findFirst({
-        where: { id, organizationId: u.organizationId },
-      });
-      if (
-        !resource ||
-        !this.scope.canAccess(u, "request.read", {
-          facilityId: resource.facilityId,
-          departmentId: resource.departmentId,
-          createdById: resource.createdById,
-        })
-      )
-        this.notificationNotFound();
-      return;
-    }
-    if (type === "FulfillmentOrder") {
-      const resource = await this.db.fulfillmentOrder.findFirst({
-        where: { id, organizationId: u.organizationId },
-        include: { destinationStockLocation: true, sourceStockLocation: true },
-      });
-      if (!resource) this.notificationNotFound();
-      if (u.kind === "SUPPLIER") {
-        if (
-          !u.supplierId ||
-          resource.supplierId !== u.supplierId ||
-          !this.scope.canAccess(u, "supplier_order.read_own", {
-            supplierId: resource.supplierId,
-          })
-        )
-          this.notificationNotFound();
-        return;
-      }
-      const canRead =
-        this.scope.canAccess(u, "order.read", {
-          facilityId: resource.destinationStockLocation.facilityId,
-          stockLocationId: resource.destinationStockLocationId,
-        }) ||
-        (resource.sourceStockLocation
-          ? this.scope.canAccess(u, "order.read", {
-              facilityId: resource.sourceStockLocation.facilityId,
-              stockLocationId: resource.sourceStockLocationId,
-            })
-          : false);
-      if (!canRead) this.notificationNotFound();
-      return;
-    }
-    if (type === "Transfer") {
-      const resource = await this.db.transfer.findFirst({
-        where: { id, organizationId: u.organizationId },
-        include: { fromStockLocation: true, toStockLocation: true },
-      });
-      if (
-        !resource ||
-        (!this.scope.canAccess(u, "transfer.read", {
-          facilityId: resource.fromStockLocation.facilityId,
-          stockLocationId: resource.fromStockLocationId,
-        }) &&
-          !this.scope.canAccess(u, "transfer.read", {
-            facilityId: resource.toStockLocation.facilityId,
-            stockLocationId: resource.toStockLocationId,
-          }))
-      )
-        this.notificationNotFound();
-      return;
-    }
-    if (type === "DamageReport") {
-      const resource = await this.db.damageReport.findFirst({
-        where: {
-          id,
-          stockLocation: { facility: { organizationId: u.organizationId } },
-        },
-        include: { stockLocation: true },
-      });
-      if (
-        !resource ||
-        !this.scope.canAccess(u, "damage.read", {
-          facilityId: resource.stockLocation.facilityId,
-          stockLocationId: resource.stockLocationId,
-          createdById: resource.createdById,
-        })
-      )
-        this.notificationNotFound();
-      return;
-    }
-    if (type === "DiscrepancyCase") {
-      const resource = await this.db.discrepancyCase.findFirst({
-        where: {
-          id,
-          receipt: { order: { organizationId: u.organizationId } },
-        },
-        include: {
-          receipt: {
-            include: {
-              order: { include: { destinationStockLocation: true } },
-            },
-          },
-        },
-      });
-      const destination = resource?.receipt.order.destinationStockLocation;
-      if (
-        !resource ||
-        !destination ||
-        !this.scope.canAccess(u, "discrepancy.read", {
-          facilityId: destination.facilityId,
-          stockLocationId: resource.receipt.order.destinationStockLocationId,
-        })
-      )
-        this.notificationNotFound();
-      return;
-    }
-    if (type === "Stocktake") {
-      const resource = await this.db.stocktake.findFirst({
-        where: {
-          id,
-          stockLocation: { facility: { organizationId: u.organizationId } },
-        },
-        include: { stockLocation: true },
-      });
-      if (
-        !resource ||
-        !this.scope.canAccess(u, "stocktake.read", {
-          facilityId: resource.stockLocation.facilityId,
-          stockLocationId: resource.stockLocationId,
-          createdById: resource.createdById,
-        })
-      )
-        this.notificationNotFound();
-      return;
-    }
-    this.notificationNotFound();
+    const allowed = await this.authorizedNotificationIds(u, {
+      organizationId: u.organizationId,
+      userId: u.id,
+      resourceType: type,
+      resourceId: id,
+    });
+    if (allowed.length === 0) this.notificationNotFound();
   }
 
   private notificationNotFound(): never {

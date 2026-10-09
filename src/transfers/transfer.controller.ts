@@ -31,14 +31,14 @@ export class TransferController {
   constructor(private readonly service: TransferService) {}
 
   @Get()
-  @ApiEndpoint("Xem danh sách phiếu điều chuyển", { audience: "both" })
+  @ApiEndpoint("Xem danh sách phiếu điều chuyển", { audience: "mobile" })
   @RequirePermissions("transfer.read")
   list(@CurrentUser() user: AuthUser, @Query() query: TransferListQueryDto) {
     return this.service.list(user, query);
   }
 
   @Get(":id")
-  @ApiEndpoint("Xem chi tiết phiếu điều chuyển", { audience: "both" })
+  @ApiEndpoint("Xem chi tiết phiếu điều chuyển", { audience: "mobile" })
   @RequirePermissions("transfer.read")
   detail(
     @CurrentUser() user: AuthUser,
@@ -48,7 +48,7 @@ export class TransferController {
   }
 
   @Post()
-  @ApiEndpoint("Tạo phiếu điều chuyển", { audience: "both" })
+  @ApiEndpoint("Tạo phiếu điều chuyển", { audience: "mobile" })
   @RequirePermissions("transfer.create")
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTransferDto) {
     return this.service.create(user, dto);
@@ -56,7 +56,7 @@ export class TransferController {
 
   @Put(":id")
   @ApiEndpoint("Cập nhật phiếu điều chuyển đang ở bản nháp", {
-    audience: "both",
+    audience: "mobile",
   })
   @RequirePermissions("transfer.update_draft")
   update(
@@ -68,7 +68,7 @@ export class TransferController {
   }
 
   @Post(":id/cancel")
-  @ApiEndpoint("Hủy phiếu điều chuyển", { audience: "both" })
+  @ApiEndpoint("Hủy phiếu điều chuyển", { audience: "mobile" })
   @RequirePermissions("transfer.cancel")
   cancel(
     @CurrentUser() user: AuthUser,
@@ -79,7 +79,7 @@ export class TransferController {
   }
 
   @Post(":id/submit")
-  @ApiEndpoint("Gửi phiếu điều chuyển để duyệt", { audience: "both" })
+  @ApiEndpoint("Gửi phiếu điều chuyển để duyệt", { audience: "mobile" })
   @RequirePermissions("transfer.submit")
   submit(
     @CurrentUser() user: AuthUser,
@@ -91,7 +91,7 @@ export class TransferController {
 
   @Post(":id/approve")
   @ApiEndpoint("Duyệt và ghi nhận phiếu điều chuyển", {
-    audience: "admin-web",
+    audience: "mobile",
   })
   @RequirePermissions("transfer.approve")
   approve(
@@ -104,7 +104,7 @@ export class TransferController {
   }
 
   @Post(":id/reject")
-  @ApiEndpoint("Từ chối phiếu điều chuyển", { audience: "admin-web" })
+  @ApiEndpoint("Từ chối phiếu điều chuyển", { audience: "mobile" })
   @RequirePermissions("transfer.reject")
   reject(
     @CurrentUser() user: AuthUser,

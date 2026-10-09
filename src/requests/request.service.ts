@@ -1,3 +1,5 @@
+import { cancelUnreceivedOrder } from "../common/utils/cancel-order.js";
+import { endOfBusinessDay } from "../common/utils/business-day.js";
 import { randomUUID } from "node:crypto";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth.types.js";
@@ -167,13 +169,12 @@ export class RequestService {
   }
 
   async revise(u: AuthUser, id: string, d: UpdateRequestDto) {
-    return this.replaceDraft(
-      u,
-      id,
-      d,
-      DocumentStatus.REJECTED,
-      "request.revise",
-      "Tạo revision mới từ yêu cầu bị từ chối thành công.",
+    const request = await this.detail(u, id);
+    if (request.data.version !== d.expected_version) this.version();
+    throw new ApiException(
+      ErrorCode.INVALID_STATE,
+      "Phiếu bị từ chối phải được tạo mới bằng POST /requests; phiếu cũ được giữ nguyên lịch sử.",
+      HttpStatus.CONFLICT,
     );
   }
 
@@ -193,9 +194,16 @@ export class RequestService {
         if (
           request.status !== DocumentStatus.DRAFT &&
           request.status !== DocumentStatus.SUBMITTED &&
-          request.status !== DocumentStatus.REJECTED
+          request.status !== DocumentStatus.REJECTED &&
+          request.status !== DocumentStatus.APPROVED
         )
           this.invalidState(request.status);
+        const orders = await tx.fulfillmentOrder.findMany({
+          where: { requestId: id, status: { not: "CANCELLED" } },
+          select: { id: true },
+        });
+        for (const order of orders)
+          await cancelUnreceivedOrder(tx, u, order.id, d.note);
         const guard = await tx.supplyRequest.updateMany({
           where: {
             id,
@@ -384,7 +392,7 @@ export class RequestService {
         const r = await tx.supplyRequest.findFirst({
           where: { id, organizationId: u.organizationId },
           include: {
-            lines: { include: { ingredient: true } },
+            lines: { include: { ingredient: { include: { baseUnit: true } } } },
             facility: true,
             department: { include: { stockLocation: true } },
           },
@@ -552,12 +560,13 @@ export class RequestService {
                 : { supplierId: source }),
               destinationStockLocationId: r.department.stockLocationId,
               releasedAt: new Date(),
+              shortageDeadlineAt: endOfBusinessDay(r.requiredDate),
               lines: {
                 create: lines.map((l) => ({
                   requestLineId: l.id,
                   ingredientId: l.ingredientId,
                   approvedQuantity: l.baseQuantity,
-                  unitCodeSnapshot: l.unitCodeSnapshot,
+                  unitCodeSnapshot: l.ingredient.baseUnit.code,
                   unitPriceSnapshot:
                     type === SourceType.SUPPLIER
                       ? (priceBySupplierAndIngredient.get(

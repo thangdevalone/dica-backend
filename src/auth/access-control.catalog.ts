@@ -1,5 +1,5 @@
 /** Tăng version khi thay đổi permission hoặc quyền của role hệ thống. */
-export const ACCESS_CONTROL_VERSION = 3;
+export const ACCESS_CONTROL_VERSION = 4;
 
 export const SYSTEM_PERMISSIONS = [
   "user.read",
@@ -105,6 +105,16 @@ export const SYSTEM_PERMISSIONS = [
   "backup.manage",
   "supplier_order.read_own",
   "dashboard.read",
+  "price.read",
+  "price.update",
+  "price_rule.manage",
+  "price_alert.read",
+  "workflow_policy.manage",
+  "system.purge",
+  "payment_tracking.confirm",
+  "return.read",
+  "return.create",
+  "return.approve",
 ] as const;
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
@@ -116,6 +126,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   GENERAL_MANAGER: SYSTEM_PERMISSIONS.filter(
     (permission) =>
       ![
+        "price_rule.manage",
+        "workflow_policy.manage",
+        "system.purge",
+        "adjustment.approve",
+        "adjustment.post",
         "role.manage",
         "grant.assign",
         "grant.revoke",
@@ -125,6 +140,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
       ].includes(permission),
   ),
   BRANCH_MANAGER: [
+    "return.read",
+    "return.create",
+    "damage.confirm",
     "facility.read",
     "stock_location.read",
     "department.read",
@@ -165,6 +183,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "dashboard.read",
   ],
   BRANCH_STAFF: [
+    "return.read",
+    "return.create",
+    "damage.confirm",
     "facility.read",
     "stock_location.read",
     "department.read",
@@ -175,20 +196,16 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "request.read",
     "request.create",
     "request.update_draft",
-    "request.revise",
     "request.submit",
-    "request.cancel",
     "transfer.read",
     "transfer.create",
     "transfer.update_draft",
     "transfer.submit",
-    "transfer.cancel",
     "order.read",
     "receipt.read",
     "receipt.create",
     "receipt.post",
     "discrepancy.read",
-    "stock.read",
     "stocktake.read",
     "stocktake.create",
     "stocktake.update_draft",
@@ -203,6 +220,9 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "dashboard.read",
   ],
   WAREHOUSE_STAFF: [
+    "return.read",
+    "return.create",
+    "damage.confirm",
     "facility.read",
     "stock_location.read",
     "department.read",
@@ -215,14 +235,11 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "request.read",
     "request.create",
     "request.update_draft",
-    "request.revise",
     "request.submit",
-    "request.cancel",
     "transfer.read",
     "transfer.create",
     "transfer.update_draft",
     "transfer.submit",
-    "transfer.cancel",
     "order.read",
     "dispatch.read",
     "dispatch.create",
@@ -231,8 +248,6 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, readonly string[]> = {
     "receipt.create",
     "receipt.post",
     "discrepancy.read",
-    "stock.read",
-    "stock_ledger.read",
     "stocktake.read",
     "stocktake.create",
     "stocktake.update_draft",

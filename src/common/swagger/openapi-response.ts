@@ -80,6 +80,7 @@ const orderStatus = {
   type: "string",
   enum: ["DRAFT", "RELEASED", "PARTIAL", "COMPLETED", "CLOSED", "CANCELLED"],
 };
+const paymentStatus = { type: "string", enum: ["UNPAID", "PARTIAL", "PAID"] };
 
 export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
   PaginationMeta: {
@@ -485,6 +486,7 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       version: { type: "integer", minimum: 1 },
       note: nullable({ type: "string" }),
       expectedArrivalAt: nullable(dateTime),
+      expectedArrivalEndAt: nullable(dateTime),
       submittedAt: nullable(dateTime),
       decidedAt: nullable(dateTime),
       createdAt: dateTime,
@@ -522,6 +524,7 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       acceptedExcessQuantity: decimal,
       closedRemainingQuantity: decimal,
       unitCodeSnapshot: { type: "string" },
+      returnedQuantity: decimal,
       unitPriceSnapshot: nullable(decimal),
       version: { type: "integer", minimum: 1 },
       ingredient: ref("Ingredient"),
@@ -548,6 +551,8 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       destinationStockLocationId: uuid,
       status: orderStatus,
       version: { type: "integer", minimum: 1 },
+      shortageDeadlineAt: nullable(dateTime),
+      paymentDueAt: nullable(dateTime),
       releasedAt: nullable(dateTime),
       createdAt: dateTime,
       updatedAt: dateTime,
@@ -557,6 +562,67 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       lines: arrayOf(ref("FulfillmentLine")),
       dispatches: arrayOf(ref("Dispatch")),
       receipts: arrayOf(ref("Receipt")),
+    },
+  ),
+  PurgePreview: entity(["id", "kind", "name", "counts", "previewHash"], {
+    id: uuid,
+    kind: {
+      type: "string",
+      enum: ["facility", "stock_location", "ingredient", "supplier"],
+    },
+    name: { type: "string" },
+    counts: { type: "object", additionalProperties: { type: "integer" } },
+    previewHash: { type: "string", pattern: "^[a-f0-9]{64}$" },
+  }),
+  SalesCancellation: entity(["sales_record_id", "cancelled"], {
+    sales_record_id: uuid,
+    cancelled: { type: "boolean" },
+  }),
+  WorkflowPolicy: entity(
+    ["paymentApprovalRequired", "attachmentRetentionMonths"],
+    {
+      paymentApprovalRequired: { type: "boolean" },
+      attachmentRetentionMonths: { type: "integer", minimum: 6, maximum: 12 },
+    },
+  ),
+  PriceRule: entity(["id", "ingredientId", "basePrice", "tolerancePercent"], {
+    id: uuid,
+    organizationId: uuid,
+    ingredientId: uuid,
+    basePrice: decimal,
+    tolerancePercent: decimal,
+    updatedAt: dateTime,
+  }),
+  WorkflowCommandResult: entity(["order_id", "version"], {
+    order_id: uuid,
+    version: { type: "integer" },
+    status: paymentStatus,
+  }),
+  ReturnDocument: entity(
+    ["id", "orderId", "code", "status", "version", "lines"],
+    {
+      id: uuid,
+      orderId: uuid,
+      code: { type: "string" },
+      status: documentStatus,
+      version: { type: "integer" },
+      createdById: uuid,
+      approvedById: nullable(uuid),
+      note: { type: "string" },
+      decisionNote: nullable({ type: "string" }),
+      createdAt: dateTime,
+      approvedAt: nullable(dateTime),
+      settleAt: nullable(dateTime),
+      postedAt: nullable(dateTime),
+      order: ref("FulfillmentOrder"),
+      lines: arrayOf(
+        entity(["id", "returnId", "orderLineId", "quantity"], {
+          id: uuid,
+          returnId: uuid,
+          orderLineId: uuid,
+          quantity: decimal,
+        }),
+      ),
     },
   ),
   SupplierOrderProjection: entity(
@@ -584,6 +650,10 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
             approvedQuantity: decimal,
             receivedQuantity: decimal,
             unitCodeSnapshot: { type: "string" },
+            unitPriceSnapshot: nullable(decimal),
+            acceptedExcessQuantity: decimal,
+            returnedQuantity: decimal,
+            closedRemainingQuantity: decimal,
             ingredient: entity(["code", "name"], {
               code: { type: "string" },
               name: { type: "string" },
@@ -790,7 +860,10 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       mimeType: { type: "string" },
       sizeBytes: { type: "integer", minimum: 1 },
       createdAt: dateTime,
-      viewUrl: nullable({ type: "string", format: "uri" }),
+      viewUrl: {
+        type: "string",
+        description: "Authenticated relative API path; GET with Bearer token.",
+      },
     },
   ),
   AttachmentUploadInit: entity(
@@ -825,7 +898,10 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       mimeType: { type: "string" },
       sizeBytes: { type: "integer", minimum: 1 },
       createdAt: dateTime,
-      viewUrl: nullable({ type: "string", format: "uri" }),
+      viewUrl: {
+        type: "string",
+        description: "Authenticated relative API path; GET with Bearer token.",
+      },
     },
   ),
   StocktakeLine: entity(
@@ -902,41 +978,33 @@ export const DICA_RESPONSE_SCHEMAS: Record<string, Schema> = {
       lines: arrayOf(ref("DamageLine")),
     },
   ),
-  PaymentTracking: entity(
-    [
-      "orderId",
-      "orderCode",
-      "reconciledValue",
-      "paidValue",
-      "status",
-      "version",
-    ],
-    {
-      orderId: uuid,
-      orderCode: { type: "string" },
-      reconciledValue: decimal,
-      paidValue: decimal,
-      status: { type: "string", enum: ["UNPAID", "PARTIAL", "PAID"] },
-      version: { type: "integer", minimum: 0 },
-    },
-  ),
+  PaymentTracking: entity(["orderId", "orderCode", "status", "version"], {
+    orderId: uuid,
+    orderCode: { type: "string" },
+    facilityId: uuid,
+    stockLocationId: uuid,
+    paymentApprovalRequired: { type: "boolean" },
+    updatedById: nullable(uuid),
+    confirmedById: nullable(uuid),
+    reconciledValue: decimal,
+    pendingPaidValue: nullable(decimal),
+    paymentDueAt: nullable(dateTime),
+    paidValue: decimal,
+    status: { type: "string", enum: ["UNPAID", "PARTIAL", "PAID"] },
+    version: { type: "integer", minimum: 0 },
+  }),
   PaymentTrackingReport: entity(
-    [
-      "id",
-      "orderId",
-      "reconciledValue",
-      "paidValue",
-      "status",
-      "version",
-      "updatedAt",
-    ],
+    ["id", "orderId", "status", "version", "updatedAt"],
     {
       id: uuid,
       orderId: uuid,
-      reconciledValue: decimal,
+      reconciledValue: nullable(decimal),
+      pendingPaidValue: nullable(decimal),
+      paymentDueAt: nullable(dateTime),
       paidValue: decimal,
       status: { type: "string", enum: ["UNPAID", "PARTIAL", "PAID"] },
-      version: { type: "integer", minimum: 1 },
+      version: { type: "integer", minimum: 0 },
+      dataIncomplete: { type: "boolean" },
       updatedAt: dateTime,
       order: ref("FulfillmentOrder"),
     },
@@ -1199,6 +1267,8 @@ const LIST_ROUTES = new Set([
   "/item-eligibility",
   "/group-eligibility",
   "/source-rules",
+  "/price-rules",
+  "/returns",
   "/requests",
   "/transfers",
   "/orders",
@@ -1234,6 +1304,13 @@ function normalizedPath(path: string): string {
 }
 
 function responseSchemaName(path: string): string {
+  if (path.startsWith("/permanent-delete")) return "PurgePreview";
+  if (path.startsWith("/sales-records")) return "SalesCancellation";
+  if (path === "/workflow-policy") return "WorkflowPolicy";
+  if (path === "/price-rules") return "PriceRule";
+  if (path.startsWith("/returns")) return "ReturnDocument";
+  if (/^\/orders\/\{[^}]+\}\/(prices|payment-confirm)$/.test(path))
+    return "WorkflowCommandResult";
   if (/^\/auth\/(login|refresh)$/.test(path)) return "AuthSession";
   if (path === "/me" || path === "/me/profile") return "MeProfile";
   if (path === "/me/permissions") return "PermissionContext";

@@ -195,3 +195,10 @@ export class CreateAlertRuleDto {
   @Matches(/^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/)
   threshold_value!: string;
 }
+
+export class CancelSalesRecordDto {
+  @ApiProperty({ minLength: 3, maxLength: 1000 })
+  @IsString()
+  @Length(3, 1000)
+  reason!: string;
+}

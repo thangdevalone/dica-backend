@@ -18,6 +18,23 @@ export class PermissionGuard implements CanActivate {
       [ctx.getHandler(), ctx.getClass()],
     );
     if (!required?.length) return true;
+    const user = ctx.switchToHttp().getRequest<Request>().user;
+    if (
+      user?.kind === "SUPPLIER" &&
+      required.some(
+        (permission) =>
+          ![
+            "supplier_order.read_own",
+            "notification.read_own",
+            "notification.mark_own",
+          ].includes(permission),
+      )
+    )
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        "Nhà cung cấp chỉ được xem đơn của mình và thông báo.",
+        HttpStatus.FORBIDDEN,
+      );
     const set = new Set(
       ctx
         .switchToHttp()

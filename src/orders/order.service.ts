@@ -1,3 +1,4 @@
+import { cancelUnreceivedOrder } from "../common/utils/cancel-order.js";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { AuthUser } from "../auth/auth.types.js";
@@ -149,6 +150,10 @@ export class OrderService {
                 approvedQuantity: true,
                 receivedQuantity: true,
                 unitCodeSnapshot: true,
+                unitPriceSnapshot: true,
+                acceptedExcessQuantity: true,
+                returnedQuantity: true,
+                closedRemainingQuantity: true,
                 ingredient: { select: { code: true, name: true } },
               },
             },
@@ -189,6 +194,10 @@ export class OrderService {
             approvedQuantity: true,
             receivedQuantity: true,
             unitCodeSnapshot: true,
+            unitPriceSnapshot: true,
+            acceptedExcessQuantity: true,
+            returnedQuantity: true,
+            closedRemainingQuantity: true,
             ingredient: { select: { code: true, name: true } },
           },
         },
@@ -199,12 +208,6 @@ export class OrderService {
   }
 
   async closeOutstanding(u: AuthUser, id: string, d: CloseOutstandingDto) {
-    if (!this.config.get<boolean>("DEMO_POLICY_ENABLED", false))
-      throw new ApiException(
-        ErrorCode.POLICY_NOT_CONFIGURED,
-        "Chính sách đóng phần còn thiếu chưa được chốt cho production.",
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
     const order = await this.db.fulfillmentOrder.findFirst({
       where: { id, organizationId: u.organizationId },
       include: {
@@ -215,6 +218,13 @@ export class OrderService {
       },
     });
     if (!order) this.notFound();
+    if (!order.shortageDeadlineAt || order.shortageDeadlineAt > new Date())
+      throw new ApiException(
+        ErrorCode.INVALID_STATE,
+        "Còn trong ngày giao bù; hệ thống tự đóng phần thiếu lúc 00:00.",
+        HttpStatus.CONFLICT,
+      );
+
     const allowed =
       this.scope.canAccess(u, "order.close_outstanding", {
         facilityId: order.destinationStockLocation.facilityId,
@@ -363,65 +373,18 @@ export class OrderService {
         "Đơn đã được cập nhật. Vui lòng tải lại trước khi thao tác.",
         HttpStatus.CONFLICT,
       );
-    if (order.status !== OrderStatus.RELEASED)
-      throw new ApiException(
-        ErrorCode.INVALID_STATE,
-        "Chỉ đơn đã phát hành nhưng chưa thực hiện mới được hủy.",
-        HttpStatus.CONFLICT,
-      );
-    if (
-      order.dispatches.some((item) => item.status === "POSTED") ||
-      order.receipts.some((item) => item.status === "POSTED")
-    )
-      throw new ApiException(
-        ErrorCode.INVALID_STATE,
-        "Đơn đã có ledger giao nhận; không thể hủy làm mất dấu lịch sử.",
-        HttpStatus.CONFLICT,
-      );
     const data = await this.db.$transaction(
       async (tx) => {
-        const guard = await tx.fulfillmentOrder.updateMany({
-          where: {
-            id,
-            version: d.expected_version,
-            status: OrderStatus.RELEASED,
-          },
-          data: { status: OrderStatus.CANCELLED, version: { increment: 1 } },
-        });
-        if (guard.count !== 1)
-          throw new ApiException(
-            ErrorCode.VERSION_CONFLICT,
-            "Đơn vừa được cập nhật bởi thao tác khác. Vui lòng tải lại.",
-            HttpStatus.CONFLICT,
-          );
-        await tx.dispatch.updateMany({
-          where: { orderId: id, status: "DRAFT" },
-          data: { status: "CANCELLED", version: { increment: 1 } },
-        });
-        await tx.receipt.updateMany({
-          where: { orderId: id, status: "DRAFT" },
-          data: { status: "CANCELLED", version: { increment: 1 } },
-        });
-        const updated = await tx.fulfillmentOrder.findUniqueOrThrow({
+        const current = await tx.fulfillmentOrder.findUniqueOrThrow({
           where: { id },
         });
-        await tx.auditEvent.create({
-          data: {
-            organizationId: u.organizationId,
-            actorId: u.id,
-            action: "order.cancel",
-            resourceType: "FulfillmentOrder",
-            resourceId: id,
-            requestId: u.requestId,
-            beforeData: { status: order.status, version: order.version },
-            afterData: {
-              status: updated.status,
-              version: updated.version,
-              reason: d.reason,
-            },
-          },
-        });
-        return updated;
+        if (current.version !== d.expected_version)
+          throw new ApiException(
+            ErrorCode.VERSION_CONFLICT,
+            "Đơn đã thay đổi.",
+            HttpStatus.CONFLICT,
+          );
+        return cancelUnreceivedOrder(tx, u, id, d.reason);
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );

@@ -1,3 +1,5 @@
+import { cancelUnreceivedOrder } from "../common/utils/cancel-order.js";
+import { endOfBusinessDay } from "../common/utils/business-day.js";
 import { randomUUID } from "node:crypto";
 import { HttpStatus, Injectable } from "@nestjs/common";
 import type { AuthUser } from "../auth/auth.types.js";
@@ -134,12 +136,14 @@ export class TransferService {
   }
 
   async create(user: AuthUser, dto: CreateTransferDto) {
+    this.assertArrivalWindow(dto);
     if (dto.from_stock_location_id === dto.to_stock_location_id)
       this.invalid("Kho gửi và kho nhận phải khác nhau.");
     const [from, to] = await Promise.all([
       this.db.stockLocation.findFirst({
         where: {
           id: dto.from_stock_location_id,
+          type: "PHYSICAL",
           active: true,
           facility: { organizationId: user.organizationId, active: true },
         },
@@ -148,6 +152,7 @@ export class TransferService {
       this.db.stockLocation.findFirst({
         where: {
           id: dto.to_stock_location_id,
+          type: "PHYSICAL",
           active: true,
           facility: { organizationId: user.organizationId, active: true },
         },
@@ -181,6 +186,7 @@ export class TransferService {
         ...(dto.expected_arrival_at
           ? { expectedArrivalAt: new Date(dto.expected_arrival_at) }
           : {}),
+        expectedArrivalEndAt: new Date(dto.expected_arrival_end_at),
         ...(dto.note ? { note: dto.note } : {}),
         lines: { create: lines },
       },
@@ -190,6 +196,7 @@ export class TransferService {
   }
 
   async updateDraft(user: AuthUser, id: string, dto: UpdateTransferDto) {
+    this.assertArrivalWindow(dto);
     if (dto.from_stock_location_id === dto.to_stock_location_id)
       this.invalid("Kho gửi và kho nhận phải khác nhau.");
     const data = await this.db.$transaction(
@@ -255,6 +262,7 @@ export class TransferService {
             expectedArrivalAt: dto.expected_arrival_at
               ? new Date(dto.expected_arrival_at)
               : null,
+            expectedArrivalEndAt: new Date(dto.expected_arrival_end_at),
             note: dto.note ?? null,
             version: { increment: 1 },
           },
@@ -306,15 +314,21 @@ export class TransferService {
         if (
           transfer.status !== TransferStatus.DRAFT &&
           transfer.status !== TransferStatus.SUBMITTED &&
-          transfer.status !== TransferStatus.REJECTED
+          transfer.status !== TransferStatus.REJECTED &&
+          transfer.status !== TransferStatus.APPROVED
         )
           this.invalidState();
+        const orders = await tx.fulfillmentOrder.findMany({
+          where: { transferId: id, status: { not: "CANCELLED" } },
+          select: { id: true },
+        });
+        for (const order of orders)
+          await cancelUnreceivedOrder(tx, user, order.id, dto.note);
         const guard = await tx.transfer.updateMany({
           where: {
             id,
             version: dto.expected_version,
             status: transfer.status,
-            orders: { none: {} },
           },
           data: {
             status: TransferStatus.CANCELLED,
@@ -351,6 +365,28 @@ export class TransferService {
     const result = await this.db.$transaction(
       async (tx) => {
         const transfer = await this.load(tx, user, id);
+        this.assertPair(
+          transfer.fromStockLocation.facility.type,
+          transfer.toStockLocation.facility.type,
+          transfer.fromStockLocation.facilityId,
+          transfer.toStockLocation.facilityId,
+        );
+        this.assertArrivalWindow({
+          expected_arrival_at: transfer.expectedArrivalAt?.toISOString() ?? "",
+          expected_arrival_end_at:
+            transfer.expectedArrivalEndAt?.toISOString() ?? "",
+        });
+        if (
+          !transfer.fromStockLocation.active ||
+          !transfer.toStockLocation.active ||
+          !transfer.fromStockLocation.facility.active ||
+          !transfer.toStockLocation.facility.active ||
+          transfer.fromStockLocation.type !== "PHYSICAL" ||
+          transfer.toStockLocation.type !== "PHYSICAL"
+        )
+          this.invalid(
+            "Kho hoặc cơ sở không còn hoạt động hoặc không phải kho vật lý.",
+          );
         this.scope.assertAccess(user, "transfer.submit", {
           facilityId: transfer.fromStockLocation.facilityId,
           stockLocationId: transfer.fromStockLocationId,
@@ -449,6 +485,28 @@ export class TransferService {
       dto,
       async (tx) => {
         const transfer = await this.load(tx, user, id);
+        this.assertPair(
+          transfer.fromStockLocation.facility.type,
+          transfer.toStockLocation.facility.type,
+          transfer.fromStockLocation.facilityId,
+          transfer.toStockLocation.facilityId,
+        );
+        this.assertArrivalWindow({
+          expected_arrival_at: transfer.expectedArrivalAt?.toISOString() ?? "",
+          expected_arrival_end_at:
+            transfer.expectedArrivalEndAt?.toISOString() ?? "",
+        });
+        if (
+          !transfer.fromStockLocation.active ||
+          !transfer.toStockLocation.active ||
+          !transfer.fromStockLocation.facility.active ||
+          !transfer.toStockLocation.facility.active ||
+          transfer.fromStockLocation.type !== "PHYSICAL" ||
+          transfer.toStockLocation.type !== "PHYSICAL"
+        )
+          this.invalid(
+            "Kho hoặc cơ sở không còn hoạt động hoặc không phải kho vật lý.",
+          );
         this.scope.assertAccess(user, "transfer.approve", {
           facilityId: transfer.fromStockLocation.facilityId,
         });
@@ -587,6 +645,9 @@ export class TransferService {
         sourceStockLocationId: transfer.fromStockLocationId,
         destinationStockLocationId: transfer.toStockLocationId,
         releasedAt: new Date(),
+        shortageDeadlineAt: endOfBusinessDay(
+          transfer.expectedArrivalEndAt ?? new Date(),
+        ),
         lines: {
           create: transfer.lines.map((line) => ({
             transferLineId: line.id,
@@ -600,13 +661,36 @@ export class TransferService {
   }
 
   private assertPair(
-    _from: FacilityType,
-    _to: FacilityType,
+    from: FacilityType,
+    to: FacilityType,
     fromId: string,
     toId: string,
   ) {
     if (fromId === toId)
       this.invalid("Kho gửi và kho nhận phải thuộc hai cơ sở khác nhau.");
+    if (
+      !this.isCentralPair(from, to) &&
+      !(from === FacilityType.BRANCH && to === FacilityType.BRANCH) &&
+      !(from === FacilityType.CENTRAL_KITCHEN && to === FacilityType.BRANCH) &&
+      !(from === FacilityType.BRANCH && to === FacilityType.CENTRAL_KITCHEN)
+    )
+      this.invalid(
+        "Tuyến điều chuyển không được phép theo cấu hình nghiệp vụ.",
+      );
+  }
+
+  private assertArrivalWindow(
+    dto: Pick<
+      CreateTransferDto,
+      "expected_arrival_at" | "expected_arrival_end_at"
+    >,
+  ) {
+    const start = new Date(dto.expected_arrival_at ?? "").getTime();
+    const end = new Date(dto.expected_arrival_end_at ?? "").getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
+      this.invalid(
+        "Phải nhập giờ bắt đầu và kết thúc nhận hàng; giờ kết thúc phải sau giờ bắt đầu.",
+      );
   }
 
   private isCentralPair(from: FacilityType, to: FacilityType) {

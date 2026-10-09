@@ -25,6 +25,7 @@ import { SourcingModule } from "./sourcing/sourcing.module.js";
 import { SystemModule } from "./system/system.module.js";
 import { TransferModule } from "./transfers/transfer.module.js";
 import { UserModule } from "./users/user.module.js";
+import { WorkflowModule } from "./workflow/workflow.module.js";
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -101,6 +102,7 @@ import { UserModule } from "./users/user.module.js";
     DeliveryModule,
     InventoryModule,
     UserModule,
+    WorkflowModule,
     TransferModule,
     OperationModule,
     ReportingModule,
