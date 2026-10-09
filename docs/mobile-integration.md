@@ -103,6 +103,83 @@ Phiên đăng nhập:
 4. Đăng ký `POST /push-devices` với token FCM, platform ANDROID/IOS, device_id, app_version; đăng ký lại khi token đổi.
 5. Khi đăng xuất, `POST /push-devices/unregister` rồi `POST /auth/logout`; xóa local alarm, dữ liệu nhạy cảm và token trên thiết bị.
 
+### Flow lấy cơ sở và dữ liệu phụ thuộc
+
+`GET /facilities` dùng để lấy các cơ sở mà tài khoản nội bộ được phép xem/thao tác. Mobile dùng `facility.id` làm phạm vi cho selector và bộ lọc phía sau; đây không phải API chỉ để hiển thị danh mục chung.
+
+Không gọi API này cho mọi màn hình một cách bắt buộc:
+
+- Tài khoản `SUPPLIER` không cần chọn cơ sở; gọi trực tiếp `/supplier/orders` và `/notifications`, backend tự giới hạn theo NCC của token.
+- Khi mở chi tiết từ notification hoặc đã có `resource_id`, gọi API chi tiết của tài nguyên; không bắt người dùng chọn lại cơ sở.
+- Tài khoản nội bộ chỉ gọi khi màn hình cần chọn cơ sở, kho, bộ phận hoặc lọc danh sách/báo cáo.
+
+#### Khởi tạo selector cho tài khoản nội bộ
+
+1. Sau đăng nhập, đọc `/me/permissions` trước. Chỉ hiển thị selector/API khi tài khoản có permission đọc tương ứng; không dùng lỗi `403` để đoán quyền.
+2. Khi vào màn hình cần phạm vi, gọi:
+
+   ```http
+   GET /facilities?pagination_mode=cursor&page_size=100
+   ```
+
+3. Chỉ cho chọn cơ sở `active=true` khi tạo chứng từ mới. Cơ sở ngừng hoạt động vẫn có thể xuất hiện trong dữ liệu lịch sử.
+4. Nếu có nhiều hơn một trang, tải theo `meta.next_cursor` hoặc hỗ trợ tìm kiếm; không coi 100 bản ghi đầu là toàn bộ danh sách.
+5. Sau khi người dùng chọn `facility_id`, tải dữ liệu con đúng cơ sở:
+
+   ```http
+   GET /departments?facility_id=<facility_id>&pagination_mode=cursor&page_size=100
+   GET /stock-locations?facility_id=<facility_id>&pagination_mode=cursor&page_size=100
+   ```
+
+6. Chỉ cho chọn bộ phận/kho `active=true` khi tạo chứng từ. Khi đổi cơ sở, xóa `department_id`, `stock_location_id` và dữ liệu phụ thuộc đã chọn từ cơ sở cũ rồi tải lại.
+
+Mapping giá trị selector vào API nghiệp vụ:
+
+| Dữ liệu chọn                        | Giá trị mobile giữ lại                           | Dùng vào                                                                                  |
+| ----------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `facility.id`                       | `facility_id`                                    | Tạo/lọc phiếu xin hàng; lọc danh sách, tồn kho và báo cáo ở endpoint có công bố query này |
+| `department.id`                     | `department_id`                                  | Tạo phiếu xin hàng và lấy danh sách nguyên liệu được phép xin                             |
+| `stockLocation.id`                  | `stock_location_id`                              | Tạo kiểm kê, báo hỏng, điều chỉnh tồn và lọc tồn kho                                      |
+| Hai `stockLocation.id`              | `from_stock_location_id`, `to_stock_location_id` | Tạo phiếu điều chuyển                                                                     |
+| `itemEligibility.ingredient.id`     | `ingredient_id`                                  | Dòng hàng của phiếu xin                                                                   |
+| `ingredient.baseUnit.id`/đơn vị đổi | `unit_id`                                        | Đơn vị người dùng nhập trên dòng phiếu xin; backend quy đổi sang đơn vị cơ sở             |
+
+#### Flow tạo phiếu xin hàng
+
+```text
+/facilities
+  → chọn facility_id
+  → /departments?facility_id=...
+  → chọn department_id
+  → /item-eligibility?effective=true&facility_id=...&department_id=...
+  → chọn nguyên liệu/đơn vị/số lượng
+  → POST /requests
+```
+
+Chi tiết:
+
+1. Chọn cơ sở nhận hàng từ `/facilities`.
+2. Tải và chọn bộ phận thuộc cơ sở bằng `/departments?facility_id=...`.
+3. Chỉ sau khi có đủ hai ID, gọi:
+
+   ```http
+   GET /item-eligibility?effective=true&facility_id=<facility_id>&department_id=<department_id>&pagination_mode=cursor&page_size=100
+   ```
+
+4. Dùng `ingredient`, `baseUnit` và `maxQuantityPerRequest` trong kết quả để dựng dòng hàng. Đơn vị cơ sở có thể dùng ngay; nếu cho chọn đơn vị quy đổi thì tải `/conversions` và chỉ cho chọn conversion của đúng nguyên liệu.
+5. Gửi chính `facility_id` và `department_id` đang chọn vào `POST /requests`. Không lấy ID từ nhãn hiển thị và không gửi nguyên liệu ngoài kết quả eligibility hiệu lực.
+6. Nếu đổi cơ sở hoặc bộ phận khi đang lập nháp trên UI, xóa các dòng hàng cũ và tải lại eligibility vì quyền xin hàng, giới hạn số lượng và nguồn cấp có thể đã đổi.
+
+#### Flow điều chuyển, kiểm kê, báo hỏng và xem tồn
+
+- **Điều chuyển:** chọn cơ sở nguồn → tải kho nguồn; chọn cơ sở đích → tải kho đích; gửi hai ID kho vào `from_stock_location_id` và `to_stock_location_id`. Hai kho có thể thuộc hai cơ sở khác nhau. Backend vẫn kiểm tra tuyến hợp lệ và quyền; mobile không tự suy ra rằng mọi cặp kho đều được phép chuyển.
+- **Kiểm kê:** chọn cơ sở → chọn kho → gửi `stock_location_id` vào `POST /stocktakes`. Người kiểm kê chỉ nhập số thực tế, không tải số hệ thống để hiển thị nếu không có quyền.
+- **Báo hỏng:** chọn cơ sở → chọn kho phát sinh → gửi `stock_location_id` vào `POST /damage-reports`, sau đó upload ảnh và submit theo flow báo hỏng.
+- **Điều chỉnh tồn:** chọn cơ sở → chọn kho → gửi `stock_location_id` vào `POST /inventory-adjustments`; chỉ hiển thị chức năng khi có permission tương ứng.
+- **Xem tồn/báo cáo/danh sách:** dùng `facility_id` hoặc `stock_location_id` làm query filter chỉ khi endpoint đó công bố trong Swagger. Không tự thêm `facility_id` vào mọi endpoint.
+
+Selector chỉ hỗ trợ người dùng chọn đúng dữ liệu; nó không thay thế authorization. Backend tiếp tục kiểm tra permission/scope ở mọi request. Khi quyền thay đổi hoặc API trả `403`, nạp lại `/me/permissions`, bỏ cache cơ sở/kho/bộ phận không còn quyền và không tự retry command bị từ chối.
+
 ## 3. Quyền và phạm vi
 
 | Nghiệp vụ                       | Permission chính                                                                                                        |
@@ -128,7 +205,7 @@ Màn hình giá/thanh toán cần `price.read` ở cùng phạm vi với quyền
 
 ## 4. Xin hàng và hủy phiếu
 
-Danh mục selector: `/facilities`, `/departments`, `/stock-locations`, `/ingredients`, `/units`, `/conversions`. Lấy mặt hàng được xin bằng `GET /item-eligibility?effective=true&facility_id=...&department_id=...`. Quyền riêng mặt hàng ưu tiên quyền nhóm; `active=false` chặn mặt hàng; hạn mức riêng `null` nghĩa là không giới hạn.
+Flow tải selector cơ sở/bộ phận và eligibility nằm ở mục “Flow lấy cơ sở và dữ liệu phụ thuộc” phía trên. Quyền riêng mặt hàng ưu tiên quyền nhóm; `active=false` chặn mặt hàng; hạn mức riêng `null` nghĩa là không giới hạn.
 
 ```json
 {
