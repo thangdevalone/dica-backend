@@ -30,6 +30,7 @@ export class PaginationDto {
 
   @ApiPropertyOptional({
     name: "page_size",
+    type: Number,
     default: 20,
     minimum: 1,
     maximum: 100,

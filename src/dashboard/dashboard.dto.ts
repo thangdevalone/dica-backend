@@ -12,6 +12,7 @@ export class DashboardQueryDto {
   facility_id?: string;
 
   @ApiPropertyOptional({
+    type: Number,
     default: 14,
     minimum: 1,
     maximum: 90,
