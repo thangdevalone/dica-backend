@@ -13,7 +13,12 @@ import {
 } from "class-validator";
 
 export class PaginationDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
+  @ApiPropertyOptional({
+    type: Number,
+    default: 1,
+    minimum: 1,
+    description: "Số trang (dùng khi pagination_mode=offset).",
+  })
   @IsOptional()
   @Transform(({ value }) => Number(value))
   @IsInt({ message: "Trang phải là số nguyên." })
@@ -21,7 +26,7 @@ export class PaginationDto {
   @Max(10_000, {
     message: "Trang offset quá sâu; hãy dùng pagination_mode=cursor.",
   })
-  page = 1;
+  page: number = 1;
 
   @ApiPropertyOptional({
     name: "page_size",
